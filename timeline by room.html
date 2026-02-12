@@ -1,0 +1,309 @@
+﻿<!DOCTYPE html>
+<html>
+ <head>
+   <meta charset="utf-8" />
+   <style>
+     html{ box-sizing:border-box }
+     *,*::before,*::after{ box-sizing:inherit }
+
+
+     :root{
+       --pad:8px; --border:#e5e7eb; --grid:#f2f3f5; --muted:#667085;
+       --label-w:130px; --axis-h:22px; --lane-h:22px; --bar-h:16px;
+       --row-gap:4px; --day-gap:6px;
+     }
+
+
+     body{ font:12px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; margin:10px 12px }
+
+
+     /* Header / controls */
+     #bar{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+     .title{flex:1 1 100%;text-align:center;font-weight:800;font-size:18px;margin:0 0 2px 0;letter-spacing:.2px}
+     #details{flex:1 1 100%;color:var(--muted);margin-bottom:2px}
+     button{padding:5px 9px;border-radius:8px;border:1px solid #ddd;background:#fafafa;cursor:pointer;font-size:12px}
+     button:hover{background:#f2f2f2}
+
+
+     #chart{width:100%;max-width:100%;border:1px solid var(--border);border-radius:8px;
+            padding:var(--pad);background:#fff;overflow-y:auto;overflow-x:clip}
+
+
+     /* Day section */
+     .day{border:1px solid var(--border);border-radius:8px;margin-bottom:var(--day-gap);background:#fff;overflow:clip}
+     .dayHeader{display:grid;grid-template-columns:var(--label-w) 1fr;align-items:stretch;height:var(--axis-h);
+                padding:0 8px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2;background:#fff}
+     .dayHeader.colored .dayTitle{color:#fff}
+     .dayHeader.colored .axis .tick{color:#fff;opacity:.95}
+     .dayTitle{font-weight:700;font-size:12px;display:flex;align-items:center;height:100%}
+     .axis{position:relative;height:var(--axis-h);overflow:clip}
+     .tick{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:10px;color:#475467;white-space:nowrap}
+     .tick.edgeL{transform:translateY(-50%)}
+     .tick.edgeR{transform:translate(-100%,-50%)}
+     .tickline{position:absolute;top:16px;width:1px;bottom:-10000px;background:var(--grid)}
+
+
+     /* Rows */
+     .rows{padding:6px 8px}
+     .row{display:grid;grid-template-columns:var(--label-w) 1fr;align-items:center;column-gap:8px;margin-bottom:var(--row-gap)}
+     .label{font-size:11px;color:#344054}
+     .lane{position:relative;height:var(--lane-h);background:#fafafa;border:1px dashed #ebebeb;border-radius:6px}
+
+
+     /* Bars */
+     .bar{
+       position:absolute;height:var(--bar-h);border-radius:6px;display:flex;align-items:center;
+       padding:0 6px;font-size:10px;color:#fff;font-weight:700;background:#c5d7fa;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+     }
+
+
+     /* Legend */
+     .legend{display:flex;gap:10px;flex-wrap:wrap}
+     .chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#475467}
+     .dot{width:12px;height:12px;border-radius:3px;background:#c5d7fa;border:1px solid #d0d5dd}
+     .hint{font-size:11px;color:#98a2b3;margin-left:6px}
+   </style>
+ </head>
+ <body>
+   <div id="bar">
+     <h1 class="title">Poddster Singapore Weekly Timeline</h1>
+     <div id="details"></div>
+     <button id="fit">Fit to 09:00–18:00</button>
+     <button id="size">Fill window</button>
+     <div id="legend" class="legend"></div>
+     <span class="hint">(Studio rows, colored by set)</span>
+   </div>
+
+
+   <div id="chart"></div>
+
+
+   <script>
+     /* Orders & mappings */
+     const DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+
+     /* Studios + Event lane */
+     const STUDIO_ORDER = ['Studio 1','Studio 2','Studio 3','Studio 4','Event'];
+
+
+     /* Map each set/room name coming from the sheet to a lane */
+     const STUDIO_FROM_SET = {
+       Exec:'Studio 1', Nest:'Studio 1',
+       Iris:'Studio 2', Club:'Studio 2',
+       Nova:'Studio 3',
+       Soho:'Studio 4',
+       Event:'Event'
+     };
+
+
+     /* Set colors (bars + legend) — Event is black */
+     const SET_COLOR = {
+       Exec:'#2E6F74',  Club:'#4C6FAE',  Iris:'#7B4B83',
+       Nest:'#708D57',  Nova:'#C06342',  Soho:'#D6A77A',
+       Event:'#000000'
+     };
+
+
+     /* Day-header palette */
+     const DAY_HEADER_BG = {
+       Monday:'#1F4C50', Tuesday:'#375893', Wednesday:'#5E3B63',
+       Thursday:'#556B41', Friday:'#8F472F', Saturday:'#B68B67', Sunday:'#37474F'
+     };
+
+
+     const H_START = 9, H_END = 18;
+     const WINDOW_MIN = (H_END - H_START) * 60;
+
+
+     const clamp = (v,min,max) => Math.max(min, Math.min(max, v));
+     const minsFromStart = d => d.getHours()*60 + d.getMinutes() - H_START*60;
+
+
+     let __lastPayload = null;
+
+
+     function render(payload){
+       __lastPayload = payload;
+
+
+       // Normalize items from Apps Script
+       const items = (payload.items || []).map(i=>{
+         let day = '', setName = String(i.room || '').trim();
+         if (!day || !setName){
+           const parts = String(i.group||'').split('—');
+           if (parts.length >= 2){ day = parts[0].trim(); setName = setName || parts[1].trim(); }
+         }
+         const normDay = DAY_ORDER.find(d => d.toLowerCase() === String(day||'').toLowerCase()) || day;
+         const studio = STUDIO_FROM_SET[setName] || 'Event';   // fallback to Event lane
+         return {
+           day: normDay,
+           studio,
+           set: setName,
+           label: String(i.label || ''),
+           start: new Date(i.startMs),
+           end:   new Date(i.endMs),
+           seats: String(i.seats || ''),
+           color: SET_COLOR[setName] || '#444'
+         };
+       });
+
+
+       // Group by day → lane
+       const byDay = {};
+       items.forEach(it => { (byDay[it.day] ||= {}); (byDay[it.day][it.studio] ||= []).push(it); });
+
+
+       // Legend
+       const legend = document.getElementById('legend'); legend.innerHTML = '';
+       ['Exec','Nest','Iris','Club','Nova','Soho','Event'].forEach(set=>{
+         const chip = document.createElement('span'); chip.className='chip';
+         const dot = document.createElement('span'); dot.className='dot';
+         dot.style.background = SET_COLOR[set];
+         if (set === 'Event') dot.style.border = '1px solid #222';
+         chip.append(dot, document.createTextNode(set));
+         legend.appendChild(chip);
+       });
+
+
+       // Details (de-dupe week vs sheet)
+       function canonWeek(s){
+         const m = (s || '').toLowerCase()
+           .replace(/[“”"']/g,'')
+           .replace(/\b(\d{1,2})(st|nd|rd|th)\b/g,'$1')
+           .replace(/[-–—]+/g,'-').replace(/\s+/g,' ').trim();
+         const months = {january:'jan',february:'feb',march:'mar',april:'apr',may:'may',june:'jun',july:'jul',august:'aug',september:'sep',october:'oct',november:'nov',december:'dec'};
+         return m.replace(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/g,(_,mon)=>months[mon]);
+       }
+       function looksLikeWeek(s){
+         return /\b\d{1,2}(?:st|nd|rd|th)?\s*-\s*\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)\b/i
+           .test(String(s || ''));
+       }
+       const tit = String(payload.title || ''), sname = String(payload.sheetName || '');
+       const showSheet = sname && !looksLikeWeek(sname) && (canonWeek(tit) !== canonWeek(sname));
+       const detailsLine = showSheet ? `${tit} — ${sname}` : tit;
+       document.getElementById('details').textContent = `${detailsLine} • Drag to pan / scroll inside. (${items.length} items)`;
+
+
+       // Build chart
+       const chart = document.getElementById('chart'); chart.innerHTML = '';
+       const daysInData = Object.keys(byDay).sort((a,b)=>DAY_ORDER.indexOf(a)-DAY_ORDER.indexOf(b));
+
+
+       daysInData.forEach(day=>{
+         // ==== NEW: only include lanes (rooms) that have items that day ====
+         const studiosForDay = STUDIO_ORDER.filter(studio =>
+           (byDay[day] && Array.isArray(byDay[day][studio]) && byDay[day][studio].length > 0)
+         );
+         if (studiosForDay.length === 0) return; // hide empty days entirely
+
+
+         const sec = document.createElement('div'); sec.className='day';
+
+
+         // Colored day header
+         const header = document.createElement('div'); header.className='dayHeader colored';
+         header.style.background = DAY_HEADER_BG[day] || '#1F4C50';
+         const title = document.createElement('div'); title.className='dayTitle'; title.textContent = day || '';
+         const axis = document.createElement('div'); axis.className='axis';
+         header.append(title, axis); sec.appendChild(header);
+
+
+         const rowsWrap = document.createElement('div'); rowsWrap.className='rows';
+         sec.appendChild(rowsWrap); chart.appendChild(sec);
+
+
+         // Lanes (only those with data)
+         const laneEls = {};
+         studiosForDay.forEach(studio=>{
+           const row = document.createElement('div'); row.className='row';
+           const label = document.createElement('div'); label.className='label'; label.textContent = studio;
+           const lane = document.createElement('div'); lane.className='lane';
+           row.append(label, lane); rowsWrap.appendChild(row);
+           laneEls[studio] = lane;
+         });
+
+
+         // Measure for tick alignment
+         const firstLane = laneEls[studiosForDay[0]];
+         const laneRect = firstLane.getBoundingClientRect();
+         const axisRect = axis.getBoundingClientRect();
+         const laneLeftInAxis = laneRect.left - axisRect.left;
+         const laneWidth = firstLane.clientWidth;
+
+
+         // Hour ticks
+         axis.innerHTML = '';
+         const hours = H_END - H_START;
+         const laneLeft  = Math.round(laneLeftInAxis);
+         const laneWidthInt = Math.round(laneWidth);
+         const xMin = laneLeft, xMax = laneLeft + laneWidthInt;
+         for (let h = H_START; h <= H_END; h++){
+           const raw = laneLeft + ((h - H_START)/hours) * laneWidthInt;
+           const xi = Math.max(xMin, Math.min(xMax, Math.round(raw)));
+           const tick = document.createElement('div'); tick.className='tick';
+           if (h === H_START) tick.classList.add('edgeL');
+           if (h === H_END)   tick.classList.add('edgeR');
+           tick.style.left = xi + 'px';
+           tick.textContent = String(h).padStart(2,'0') + ':00';
+           const line = document.createElement('div'); line.className='tickline'; line.style.left = xi + 'px';
+           axis.append(tick, line);
+         }
+
+
+         // Bars (only for lanes with data)
+         studiosForDay.forEach(studio=>{
+           const lane = laneEls[studio];
+           const w = lane.clientWidth;
+           const laneCenterTop = (lane.clientHeight - parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-h'))) / 2;
+           const arr = byDay[day][studio] || [];
+           arr.forEach(it=>{
+             let s = minsFromStart(it.start), e = minsFromStart(it.end);
+             if (e <= 0 || s >= WINDOW_MIN) return;
+             s = clamp(s, 0, WINDOW_MIN-1); e = clamp(e, 1, WINDOW_MIN);
+             const left = (s / WINDOW_MIN) * w;
+             const width = Math.max(2, ((e - s) / WINDOW_MIN) * w);
+             const bar = document.createElement('div'); bar.className='bar';
+             bar.style.left = left + 'px'; bar.style.width = width + 'px'; bar.style.top = laneCenterTop + 'px';
+             bar.style.background = it.color;
+             bar.textContent = it.label;
+             const tStart = it.start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+             const tEnd   = it.end  .toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+             const seatsLine = it.seats ? `\nSeats: ${it.seats}` : '';
+             bar.title = `${it.set} — ${it.label}\n${tStart}–${tEnd}${seatsLine}`;
+             lane.appendChild(bar);
+           });
+         });
+       });
+
+
+       document.getElementById('fit').onclick = () => render(__lastPayload);
+     }
+
+
+     function fillWindow(){
+       try{
+         const w = Math.min(1200, Math.max(900, Math.round(window.screen.availWidth  * 0.95)));
+         const h = Math.min(800,  Math.max(640, Math.round(window.screen.availHeight * 0.90)));
+         google.script.host.setWidth(w);
+         google.script.host.setHeight(h);
+       }catch(e){}
+     }
+
+
+     document.addEventListener('DOMContentLoaded', () => {
+       const fitBtn = document.getElementById('fit');
+       if (fitBtn) fitBtn.textContent = `Fit to ${String(9).padStart(2,'0')}:00–${String(18).padStart(2,'0')}:00`;
+       const sizeBtn = document.getElementById('size');
+       if (sizeBtn) sizeBtn.addEventListener('click', fillWindow);
+
+
+       google.script.run
+         .withSuccessHandler(p => render(p))
+         .withFailureHandler(err => alert(err.message || err))
+         .getWeeklyTimelinePayloadSafe();
+     });
+   </script>
+ </body>
+</html>
