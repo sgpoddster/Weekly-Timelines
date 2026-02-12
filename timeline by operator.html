@@ -101,14 +101,14 @@
    <script>
      /* Orders & mappings */
      const DAY_ORDER      = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-     const OPERATOR_ORDER = ['Naz','Syaz','Fadzli','Unassigned'];   // lane order
+     const OPERATOR_ORDER = ['Naz','Syaz','Sufi','Unassigned'];   // lane order
 
 
      // Colors matching your sheet (tune if you want exact hex)
      const OP_COLOR = {
        Naz:    '#d4edbc',  // light/olive green (from screenshot)
        Syaz:   '#bfe1f6',  // light/steel blue
-       Fadzli: '#dda8f8',  // soft plum/lilac
+       Sufi: '#dda8f8',  // soft plum/lilac
        Unassigned: '#A0AEC0'
      };
 
@@ -177,7 +177,7 @@
 
        // Legend (operators) – skip Unassigned in the legend
        const legend = document.getElementById('legend'); legend.innerHTML = '';
-       (OPS_PRESENT.length ? OPS_PRESENT : ['Naz','Syaz','Fadzli'])
+       (OPS_PRESENT.length ? OPS_PRESENT : ['Naz','Syaz','Sufi'])
          .filter(op => op !== 'Unassigned')
          .forEach(op=>{
            const chip = document.createElement('span'); chip.className='chip';

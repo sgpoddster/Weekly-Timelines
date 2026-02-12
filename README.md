@@ -10,7 +10,7 @@ This project provides an integrated system for tracking podcast recording sessio
 
 ### 📊 Timeline Visualizations
 - **Room Timeline**: Visual timeline showing studio/set usage across the week
-- **Operator Timeline**: Track operator (Naz, Syaz, Fadzli) assignments and availability
+- **Operator Timeline**: Track operator (Naz, Syaz, Sufi) assignments and availability
 - Both timelines support interactive HTML dialogs with detailed session information
 
 ### 👥 Operator Management
@@ -131,7 +131,7 @@ The script automatically detects day headers in these formats:
 The script recognizes these operators (case-insensitive):
 - Naz (Reservist)
 - Syaz
-- Fadzli
+- Sufi
 - Ben
 
 To add more operators, modify the `normOp()` function in `code.gs`.

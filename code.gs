@@ -396,7 +396,7 @@ function getWeeklyTimelinePayloadSafe() {
 
 
 /* ==================================================
-* OPERATOR TIMELINE (Naz / Syaz / Fadzli)
+* OPERATOR TIMELINE (Naz / Syaz / Sufi)
 * ================================================== */
 
 
@@ -431,7 +431,7 @@ function getOperatorTimelinePayload() {
    const v = String(x || '').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
    if (v.startsWith('naz'))  return 'Naz';
    if (v.startsWith('syaz')) return 'Syaz';
-   if (v.startsWith('fadz')) return 'Fadzli';
+   if (v.startsWith('sufi')) return 'Sufi';
    return v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
  }
 

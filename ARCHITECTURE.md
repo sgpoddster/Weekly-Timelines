@@ -203,7 +203,7 @@ Return payload with items array
 **Additional Features**:
 - Reads operator name from first column of day segment
 - Walks upward to handle merged cells
-- Normalizes operator names (Naz, Syaz, Fadzli)
+- Normalizes operator names (Naz, Syaz, Sufi)
 - Groups sessions by "Day — Operator"
 
 **Operator Normalization**:
@@ -211,7 +211,7 @@ Return payload with items array
 function normOp(x)
   • "naz" / "nazreen" → "Naz"
   • "syaz" / "syazwan" → "Syaz"
-  • "fadz" / "fadzli" → "Fadzli"
+  • "fadz" / "fadzli" → "Sufi"
   • Others → Capitalized
 ```
 
@@ -503,7 +503,7 @@ function normOp(x) {
   const v = String(x || '').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
   if (v.startsWith('naz'))  return 'Naz';
   if (v.startsWith('syaz')) return 'Syaz';
-  if (v.startsWith('fadz')) return 'Fadzli';
+  if (v.startsWith('fadz')) return 'Sufi';
   if (v.startsWith('newop')) return 'NewOperator';  // Add here
   return v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
 }
@@ -542,7 +542,7 @@ Create test sheets with:
 - Extended format (day names with dates)
 - Edge cases (single session, many sessions)
 - Invalid data (bad times, missing fields)
-- Various operators (Naz, Syaz, Fadzli, others)
+- Various operators (Naz, Syaz, Sufi, others)
 
 ## Dependencies
 

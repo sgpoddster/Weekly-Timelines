@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release of Weekly Timelines system
 - Room timeline visualization showing studio/set usage across the week
-- Operator timeline visualization tracking Naz, Syaz, and Fadzli assignments
+- Operator timeline visualization tracking Naz, Syaz, and Sufi assignments
 - Interactive HTML dialogs for both timeline views
 - Operator assignment system for TBC sessions
 - Hours summary reporting per operator
