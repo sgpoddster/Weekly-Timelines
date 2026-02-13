@@ -5,6 +5,39 @@ All notable changes to the Weekly Timelines project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-13
+
+### Added
+- **Daily usage tracking** - Track studio and set usage day by day
+  - `writeDailyStudioUsage()` - Write daily studio usage for active sheet
+  - `writeDailySetUsage()` - Write daily set usage for active sheet
+  - Automatically extracts dates from row 2 day headers (e.g., "Monday, 9 February 2026")
+  - Creates "Studio Usage (Daily)" and "Set Usage (Daily)" sheets
+  - Date format: YYYY-MM-DD for easy sorting and analysis
+- **Backfill capability** - Populate historical data from beginning of year to today
+  - `backfillDailyStudioUsage()` - Backfill all sheets from Jan 1 to today
+  - `backfillDailySetUsage()` - Backfill all sheets from Jan 1 to today
+  - Processes all sheets in workbook (skips usage sheets)
+  - One-time operation to populate historical daily data
+- Menu items for daily tracking under "👩‍🎨 Assign Operators"
+  - "Write Daily Studio Usage (Active Sheet)"
+  - "Write Daily Set Usage (Active Sheet)"
+  - "🔄 Backfill Daily Studio Usage (Year to Date)"
+  - "🔄 Backfill Daily Set Usage (Year to Date)"
+
+### Changed
+- Enhanced analytics capability from weekly-only to daily + weekly + monthly tracking
+
+### Technical Details
+- Added `_getDailyStatsForActiveSheet_()` - Get daily breakdown for active sheet
+- Added `_getDailyStatsForSheet_(sheet)` - Get daily breakdown for any sheet
+- Added `_parseDateFromDayHeader_(cellText)` - Parse dates from day headers
+- Added `_formatDateLabel_(date)` - Format dates as YYYY-MM-DD
+- Added `_extractDayFromGroup_(groupStr)` - Extract day name from group strings
+- Added `_getTimelinePayloadForSheet_(sheet)` - Get timeline data for specific sheet
+- Added `_upsertDailyUsageRow_(opts)` - Upsert daily usage row by date (updates existing or appends new)
+- Daily usage sheets auto-format: hours (0.00), percentages (0.00%), counts (0)
+
 ## [1.0.0] - 2026-02-12
 
 ### Added

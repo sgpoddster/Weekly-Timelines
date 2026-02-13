@@ -22,7 +22,9 @@ This project provides an integrated system for tracking podcast recording sessio
 
 ### 📈 Analytics & Reporting
 - Hours summary by operator
-- Studio and set usage tracking (weekly and monthly)
+- Studio and set usage tracking (weekly, daily, and monthly)
+- **Daily usage tracking** - Track studio/set usage day by day with automatic date extraction
+- **Backfill capability** - Populate historical data from beginning of year to today
 - Detailed session breakdowns
 - Usage statistics across multiple sheets
 
@@ -124,6 +126,20 @@ The script automatically detects day headers in these formats:
    - Hours summary: `👩‍🎨 Assign Operators > Show Hours Summary (Active Sheet)`
    - Break plan: `👩‍🎨 Assign Operators > Show Break Plan (Active Sheet)`
    - Studio usage: `👩‍🎨 Assign Operators > Show Studio & Set Usage (Active Sheet)`
+
+### Tracking Daily Usage
+
+1. **Write Daily Usage for Active Sheet**
+   - Studio usage: `👩‍🎨 Assign Operators > Write Daily Studio Usage (Active Sheet)`
+   - Set usage: `👩‍🎨 Assign Operators > Write Daily Set Usage (Active Sheet)`
+   - This extracts dates from row 2 and creates one row per day
+
+2. **Backfill Historical Data** (One-time operation)
+   - Studio backfill: `👩‍🎨 Assign Operators > 🔄 Backfill Daily Studio Usage (Year to Date)`
+   - Set backfill: `👩‍🎨 Assign Operators > 🔄 Backfill Daily Set Usage (Year to Date)`
+   - Processes all sheets from January 1st to today
+   - Creates/updates "Studio Usage (Daily)" and "Set Usage (Daily)" sheets
+   - Date format: YYYY-MM-DD for easy sorting
 
 ## Configuration
 
