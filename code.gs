@@ -13,29 +13,6 @@ function onOpen(e) {
  var ui = SpreadsheetApp.getUi();
 
 
- // --- Assign Operators / Editor Assigner menu ---
- var assignMenu = ui.createMenu('👩‍🎨 Assign Operators');
- assignMenu
-   .addItem('Assign Editors to TBC on Active Sheet', 'assignEditorsOnActiveSheet')
-   .addItem('Undo (replace names back to TBC on Active Sheet)', 'undoAssignedOnActiveSheet')
-   .addItem('Undo for Day…', 'undoAssignedForDayOnActiveSheet')
-   .addItem('Undo for Day of Active Cell', 'undoAssignedForActiveCellDay')
-   .addSeparator()
-   .addItem('Show Hours Summary (Active Sheet)', 'showHoursSummaryDialogOnActiveSheet')
-   .addItem('Show Break Plan (Active Sheet)', 'showBreakPlanDialogOnActiveSheet')
-   .addItem('Show Studio & Set Usage (Active Sheet)', 'showStudioSetUsageDialogOnActiveSheet')
-   .addItem('Write Studio Usage Row (Weekly)', 'writeStudioUsageRow')
-   .addItem('Write Set Usage Row (Weekly)', 'writeSetUsageRow')
-   .addItem('Studio & Set Usage — Monthly (all tabs)', 'showStudioSetUsageMonthlyAllTabs')
-   .addSeparator()
-   .addItem('Write Daily Studio Usage (Active Sheet)', 'writeDailyStudioUsage')
-   .addItem('Write Daily Set Usage (Active Sheet)', 'writeDailySetUsage')
-   .addSeparator()
-   .addItem('🔄 Backfill Daily Studio Usage (Year to Date)', 'backfillDailyStudioUsage')
-   .addItem('🔄 Backfill Daily Set Usage (Year to Date)', 'backfillDailySetUsage')
-   .addToUi();
-
-
  // --- Timelines menu ---
  ui.createMenu('⏱️ Timelines')
    .addItem('Show me the room timelines!', 'openTimeline')
@@ -43,24 +20,13 @@ function onOpen(e) {
    .addToUi();
 
 
- // --- Session Data Integrity Checker menu ---
- ui.createMenu('🎬 Data Checker')
-   .addItem("Check Today's Data", 'runSanityToday')
-   .addItem("Check Yesterday's Data", 'runSanityYesterday')
-   .addItem('Check Entire Tab', 'runSanityWholeTab')
+ // --- Daily Usage Tracking menu ---
+ ui.createMenu('📊 Daily Usage Tracking')
+   .addItem('Write Daily Studio Usage (Active Sheet)', 'writeDailyStudioUsage')
+   .addItem('Write Daily Set Usage (Active Sheet)', 'writeDailySetUsage')
    .addSeparator()
-   .addItem('Send Test Email', 'sendSanityTestEmail')
-   .addToUi();
-
-
- // --- Photo JPG Helper menu ---
- ui.createMenu('📸 Photo JPG Helper')
-   .addItem('Create JPG folders for PHOTO sessions', 'createJpgFoldersFromBoard')
-   .addItem('📄 Create HTML from existing JPGs (Link/ID)', 'createHtmlFromExistingJpegs')
-   .addSeparator()
-   .addItem('📧 Send TEST Email (Active Row)', 'sendTestEmailActiveRow')
-   .addItem('📅 Test Calendar Sync', 'testCalendarSync')
-   .addItem('❓ Debug Spreadsheet Layout', 'debugSpreadsheetLayout')
+   .addItem('🔄 Backfill Daily Studio Usage (Year to Date)', 'backfillDailyStudioUsage')
+   .addItem('🔄 Backfill Daily Set Usage (Year to Date)', 'backfillDailySetUsage')
    .addToUi();
 }
 
