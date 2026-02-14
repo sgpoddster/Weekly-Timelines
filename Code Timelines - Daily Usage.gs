@@ -328,6 +328,8 @@ function _getStatsForSpecificDate_(targetDate) {
   const byStudio = {};
   const bySet = {};
   const seenSessions = {}; // Track unique sessions to avoid duplicates
+  let sheetsProcessed = 0;
+  let itemsFound = 0;
 
   sheets.forEach(sheet => {
     const sheetName = sheet.getName();
@@ -337,8 +339,11 @@ function _getStatsForSpecificDate_(targetDate) {
     if (sheetName.indexOf('Working Hours') >= 0) return;
     if (sheetName.indexOf('Break Plan') >= 0) return;
     if (sheetName.indexOf('Hours Summary') >= 0) return;
+    if (sheetName.indexOf('Photo') >= 0) return;
+    if (sheetName.indexOf('Integrity') >= 0) return;
 
     try {
+      sheetsProcessed++;
       const payload = _getTimelinePayloadForSheet_(sheet);
       const items = (payload && payload.items) ? payload.items : [];
 
@@ -349,6 +354,8 @@ function _getStatsForSpecificDate_(targetDate) {
 
         // Only process items for our target date
         if (sessionDateStr !== targetDateStr) return;
+
+        itemsFound++;
 
         // Check if this session is crossed out (strikethrough)
         const isCrossedOut = _isSessionCrossedOut_(sheet, it);
@@ -378,9 +385,11 @@ function _getStatsForSpecificDate_(targetDate) {
         byStudio[studioName].count += 1;
       });
     } catch (e) {
-      Logger.log('Error processing sheet ' + sheetName + ': ' + e.message);
+      Logger.log('Error processing sheet ' + sheetName + ' for date ' + targetDateStr + ': ' + e.message);
     }
   });
+
+  Logger.log('Processed ' + sheetsProcessed + ' sheets for ' + targetDateStr + ', found ' + itemsFound + ' items, total hours: ' + totalHours);
 
   if (totalHours === 0) return null;
 
