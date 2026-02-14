@@ -90,18 +90,47 @@ function writeDailySetUsage() {
 
 
 /**
- * Backfill daily studio usage from beginning of year to today across all sheets
+ * Backfill daily studio usage - ONE MONTH ONLY (to avoid timeout)
+ * User will be prompted to select which month
  */
 function backfillDailyStudioUsage() {
-  const ss = SpreadsheetApp.getActive();
-  const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+  const ui = SpreadsheetApp.getUi();
+
+  // Prompt for month
+  const response = ui.prompt(
+    'Backfill Studio Usage - Select Month',
+    'Enter month to backfill (1-12) or "all" for current month:\nExample: 1 for January, 2 for February, etc.',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+
+  const input = response.getResponseText().trim().toLowerCase();
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  let startDate, endDate;
+
+  if (input === 'all' || input === '') {
+    // Current month only
+    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else {
+    const monthNum = parseInt(input, 10);
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      ui.alert('Invalid month number. Please enter 1-12.');
+      return;
+    }
+    startDate = new Date(today.getFullYear(), monthNum - 1, 1);
+    endDate = new Date(today.getFullYear(), monthNum, 0);
+  }
+
+  // Don't process future dates
+  if (endDate > today) endDate = new Date(today);
 
   // Process each date one by one
   const dates = [];
-  const current = new Date(startOfYear);
-  while (current <= today) {
+  const current = new Date(startDate);
+
+  while (current <= endDate) {
     const stats = _getStatsForSpecificDate_(new Date(current));
 
     if (stats && stats.totalHours > 0) {
@@ -121,22 +150,52 @@ function backfillDailyStudioUsage() {
     current.setDate(current.getDate() + 1);
   }
 
-  SpreadsheetApp.getUi().alert('Backfill complete! Processed ' + dates.length + ' date(s) with bookings.');
+  const monthName = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  SpreadsheetApp.getUi().alert('Backfill complete for ' + monthName + '!\nProcessed ' + dates.length + ' date(s) with bookings.');
 }
 
 
 /**
- * Backfill daily set usage from beginning of year to today across all sheets
+ * Backfill daily set usage - ONE MONTH ONLY (to avoid timeout)
+ * User will be prompted to select which month
  */
 function backfillDailySetUsage() {
-  const ss = SpreadsheetApp.getActive();
-  const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+  const ui = SpreadsheetApp.getUi();
+
+  // Prompt for month
+  const response = ui.prompt(
+    'Backfill Set Usage - Select Month',
+    'Enter month to backfill (1-12) or "all" for current month:\nExample: 1 for January, 2 for February, etc.',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+
+  const input = response.getResponseText().trim().toLowerCase();
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  let startDate, endDate;
+
+  if (input === 'all' || input === '') {
+    // Current month only
+    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else {
+    const monthNum = parseInt(input, 10);
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      ui.alert('Invalid month number. Please enter 1-12.');
+      return;
+    }
+    startDate = new Date(today.getFullYear(), monthNum - 1, 1);
+    endDate = new Date(today.getFullYear(), monthNum, 0);
+  }
+
+  // Don't process future dates
+  if (endDate > today) endDate = new Date(today);
 
   const dates = [];
-  const current = new Date(startOfYear);
-  while (current <= today) {
+  const current = new Date(startDate);
+
+  while (current <= endDate) {
     const stats = _getStatsForSpecificDate_(new Date(current));
 
     if (stats && stats.totalHours > 0) {
@@ -156,7 +215,8 @@ function backfillDailySetUsage() {
     current.setDate(current.getDate() + 1);
   }
 
-  SpreadsheetApp.getUi().alert('Backfill complete! Processed ' + dates.length + ' date(s) with bookings.');
+  const monthName = startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  SpreadsheetApp.getUi().alert('Backfill complete for ' + monthName + '!\nProcessed ' + dates.length + ' date(s) with bookings.');
 }
 
 
