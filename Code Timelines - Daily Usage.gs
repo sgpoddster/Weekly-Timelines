@@ -32,48 +32,60 @@ const UNKNOWN_STUDIO_DAILY = 'Other';
  * ================================================== */
 
 /**
- * Write daily studio usage for the active sheet
+ * Write daily studio usage for YESTERDAY only
  */
 function writeDailyStudioUsage() {
-  const dailyStats = _getDailyStatsForActiveSheet_();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
 
-  dailyStats.forEach(dayStat => {
+  const stats = _getStatsForSpecificDate_(yesterday);
+
+  if (stats && stats.totalHours > 0) {
     _upsertDailyUsageRow_({
       sheetName: 'Studio Usage (Daily)',
-      label: dayStat.dateLabel,
+      label: stats.dateLabel,
       labels: STUDIO_ORDER_DAILY,
       rowBuilder: function(name) {
-        const rec = dayStat.byStudio[name] || { hours: 0, count: 0 };
-        const pct = dayStat.totalHours > 0 ? (rec.hours / dayStat.totalHours) : 0;
+        const rec = stats.byStudio[name] || { hours: 0, count: 0 };
+        const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
         return [rec.hours, pct, rec.count];
       }
     });
-  });
 
-  SpreadsheetApp.getUi().alert('Daily studio usage written for ' + dailyStats.length + ' day(s).');
+    SpreadsheetApp.getUi().alert('Daily studio usage written for ' + stats.dateLabel + ' (' + stats.totalHours.toFixed(2) + ' hours)');
+  } else {
+    SpreadsheetApp.getUi().alert('No bookings found for ' + _formatDateLabel_(yesterday));
+  }
 }
 
 
 /**
- * Write daily set usage for the active sheet
+ * Write daily set usage for YESTERDAY only
  */
 function writeDailySetUsage() {
-  const dailyStats = _getDailyStatsForActiveSheet_();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
 
-  dailyStats.forEach(dayStat => {
+  const stats = _getStatsForSpecificDate_(yesterday);
+
+  if (stats && stats.totalHours > 0) {
     _upsertDailyUsageRow_({
       sheetName: 'Set Usage (Daily)',
-      label: dayStat.dateLabel,
+      label: stats.dateLabel,
       labels: SET_ORDER_DAILY,
       rowBuilder: function(name) {
-        const rec = dayStat.bySet[name] || { hours: 0, count: 0 };
-        const pct = dayStat.totalHours > 0 ? (rec.hours / dayStat.totalHours) : 0;
+        const rec = stats.bySet[name] || { hours: 0, count: 0 };
+        const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
         return [rec.hours, pct, rec.count];
       }
     });
-  });
 
-  SpreadsheetApp.getUi().alert('Daily set usage written for ' + dailyStats.length + ' day(s).');
+    SpreadsheetApp.getUi().alert('Daily set usage written for ' + stats.dateLabel + ' (' + stats.totalHours.toFixed(2) + ' hours)');
+  } else {
+    SpreadsheetApp.getUi().alert('No bookings found for ' + _formatDateLabel_(yesterday));
+  }
 }
 
 
@@ -82,76 +94,34 @@ function writeDailySetUsage() {
  */
 function backfillDailyStudioUsage() {
   const ss = SpreadsheetApp.getActive();
-  const sheets = ss.getSheets();
-  const startOfYear = new Date(new Date().getFullYear(), 0, 1); // Jan 1 of current year
+  const startOfYear = new Date(new Date().getFullYear(), 0, 1);
   const today = new Date();
-  today.setHours(23, 59, 59, 999);
+  today.setHours(0, 0, 0, 0);
 
-  // Accumulate all data by date first
-  const aggregatedByDate = {}; // { 'YYYY-MM-DD': { totalHours, byStudio } }
+  // Process each date one by one
+  const dates = [];
+  const current = new Date(startOfYear);
+  while (current <= today) {
+    const stats = _getStatsForSpecificDate_(new Date(current));
 
-  sheets.forEach(sheet => {
-    const sheetName = sheet.getName();
-
-    // Skip usage/summary sheets
-    if (sheetName.indexOf('Usage') >= 0) return;
-    if (sheetName.indexOf('Working Hours') >= 0) return;
-    if (sheetName.indexOf('Break Plan') >= 0) return;
-    if (sheetName.indexOf('Hours Summary') >= 0) return;
-
-    try {
-      const dailyStats = _getDailyStatsForSheet_(sheet);
-
-      dailyStats.forEach(dayStat => {
-        const dayDate = new Date(dayStat.date);
-
-        // Only process days within range
-        if (dayDate >= startOfYear && dayDate <= today) {
-          const dateLabel = dayStat.dateLabel;
-
-          // Initialize if first time seeing this date
-          if (!aggregatedByDate[dateLabel]) {
-            aggregatedByDate[dateLabel] = {
-              totalHours: 0,
-              byStudio: {}
-            };
-          }
-
-          // Accumulate hours and counts
-          aggregatedByDate[dateLabel].totalHours += dayStat.totalHours;
-
-          Object.keys(dayStat.byStudio).forEach(studioName => {
-            if (!aggregatedByDate[dateLabel].byStudio[studioName]) {
-              aggregatedByDate[dateLabel].byStudio[studioName] = { hours: 0, count: 0 };
-            }
-            aggregatedByDate[dateLabel].byStudio[studioName].hours += dayStat.byStudio[studioName].hours;
-            aggregatedByDate[dateLabel].byStudio[studioName].count += dayStat.byStudio[studioName].count;
-          });
+    if (stats && stats.totalHours > 0) {
+      _upsertDailyUsageRow_({
+        sheetName: 'Studio Usage (Daily)',
+        label: stats.dateLabel,
+        labels: STUDIO_ORDER_DAILY,
+        rowBuilder: function(name) {
+          const rec = stats.byStudio[name] || { hours: 0, count: 0 };
+          const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
+          return [rec.hours, pct, rec.count];
         }
       });
-    } catch (e) {
-      Logger.log('Skipping sheet ' + sheet.getName() + ': ' + e.message);
+      dates.push(stats.dateLabel);
     }
-  });
 
-  // Now write aggregated data
-  const dates = Object.keys(aggregatedByDate).sort();
-  dates.forEach(dateLabel => {
-    const dayData = aggregatedByDate[dateLabel];
+    current.setDate(current.getDate() + 1);
+  }
 
-    _upsertDailyUsageRow_({
-      sheetName: 'Studio Usage (Daily)',
-      label: dateLabel,
-      labels: STUDIO_ORDER_DAILY,
-      rowBuilder: function(name) {
-        const rec = dayData.byStudio[name] || { hours: 0, count: 0 };
-        const pct = dayData.totalHours > 0 ? (rec.hours / dayData.totalHours) : 0;
-        return [rec.hours, pct, rec.count];
-      }
-    });
-  });
-
-  SpreadsheetApp.getUi().alert('Backfill complete! Processed ' + dates.length + ' unique date(s) from ' + startOfYear.toLocaleDateString() + ' to ' + today.toLocaleDateString());
+  SpreadsheetApp.getUi().alert('Backfill complete! Processed ' + dates.length + ' date(s) with bookings.');
 }
 
 
@@ -160,76 +130,125 @@ function backfillDailyStudioUsage() {
  */
 function backfillDailySetUsage() {
   const ss = SpreadsheetApp.getActive();
-  const sheets = ss.getSheets();
   const startOfYear = new Date(new Date().getFullYear(), 0, 1);
   const today = new Date();
-  today.setHours(23, 59, 59, 999);
+  today.setHours(0, 0, 0, 0);
 
-  // Accumulate all data by date first
-  const aggregatedByDate = {}; // { 'YYYY-MM-DD': { totalHours, bySet } }
+  const dates = [];
+  const current = new Date(startOfYear);
+  while (current <= today) {
+    const stats = _getStatsForSpecificDate_(new Date(current));
 
-  sheets.forEach(sheet => {
-    const sheetName = sheet.getName();
-
-    // Skip usage/summary sheets
-    if (sheetName.indexOf('Usage') >= 0) return;
-    if (sheetName.indexOf('Working Hours') >= 0) return;
-    if (sheetName.indexOf('Break Plan') >= 0) return;
-    if (sheetName.indexOf('Hours Summary') >= 0) return;
-
-    try {
-      const dailyStats = _getDailyStatsForSheet_(sheet);
-
-      dailyStats.forEach(dayStat => {
-        const dayDate = new Date(dayStat.date);
-
-        // Only process days within range
-        if (dayDate >= startOfYear && dayDate <= today) {
-          const dateLabel = dayStat.dateLabel;
-
-          // Initialize if first time seeing this date
-          if (!aggregatedByDate[dateLabel]) {
-            aggregatedByDate[dateLabel] = {
-              totalHours: 0,
-              bySet: {}
-            };
-          }
-
-          // Accumulate hours and counts
-          aggregatedByDate[dateLabel].totalHours += dayStat.totalHours;
-
-          Object.keys(dayStat.bySet).forEach(setName => {
-            if (!aggregatedByDate[dateLabel].bySet[setName]) {
-              aggregatedByDate[dateLabel].bySet[setName] = { hours: 0, count: 0 };
-            }
-            aggregatedByDate[dateLabel].bySet[setName].hours += dayStat.bySet[setName].hours;
-            aggregatedByDate[dateLabel].bySet[setName].count += dayStat.bySet[setName].count;
-          });
+    if (stats && stats.totalHours > 0) {
+      _upsertDailyUsageRow_({
+        sheetName: 'Set Usage (Daily)',
+        label: stats.dateLabel,
+        labels: SET_ORDER_DAILY,
+        rowBuilder: function(name) {
+          const rec = stats.bySet[name] || { hours: 0, count: 0 };
+          const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
+          return [rec.hours, pct, rec.count];
         }
       });
-    } catch (e) {
-      Logger.log('Skipping sheet ' + sheet.getName() + ': ' + e.message);
+      dates.push(stats.dateLabel);
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  SpreadsheetApp.getUi().alert('Backfill complete! Processed ' + dates.length + ' date(s) with bookings.');
+}
+
+
+/**
+ * Show monthly studio usage summary (last complete month)
+ */
+function showMonthlyStudioSummary() {
+  const html = _buildMonthlySummaryHtml_('studio');
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(1100).setHeight(750),
+    'Monthly Studio Usage'
+  );
+}
+
+
+/**
+ * Show monthly set usage summary (last complete month)
+ */
+function showMonthlySetSummary() {
+  const html = _buildMonthlySummaryHtml_('set');
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(1100).setHeight(750),
+    'Monthly Set Usage'
+  );
+}
+
+
+/* ==================================================
+ * AUTO-TRIGGER FUNCTIONS
+ * ================================================== */
+
+/**
+ * Install daily trigger to auto-update yesterday's data at 2am
+ * Run this once to set up automatic daily updates
+ */
+function installDailyTrigger() {
+  // Delete existing triggers first
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'autoUpdateYesterdayData') {
+      ScriptApp.deleteTrigger(trigger);
     }
   });
 
-  // Now write aggregated data
-  const dates = Object.keys(aggregatedByDate).sort();
-  dates.forEach(dateLabel => {
-    const dayData = aggregatedByDate[dateLabel];
+  // Create new trigger for 2am daily
+  ScriptApp.newTrigger('autoUpdateYesterdayData')
+    .timeBased()
+    .atHour(2)
+    .everyDays(1)
+    .create();
 
+  SpreadsheetApp.getUi().alert('Daily auto-update installed! Will run at 2am every day.');
+}
+
+
+/**
+ * Auto-update function called by trigger
+ */
+function autoUpdateYesterdayData() {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
+
+  const stats = _getStatsForSpecificDate_(yesterday);
+
+  if (stats && stats.totalHours > 0) {
+    // Update studio usage
     _upsertDailyUsageRow_({
-      sheetName: 'Set Usage (Daily)',
-      label: dateLabel,
-      labels: SET_ORDER_DAILY,
+      sheetName: 'Studio Usage (Daily)',
+      label: stats.dateLabel,
+      labels: STUDIO_ORDER_DAILY,
       rowBuilder: function(name) {
-        const rec = dayData.bySet[name] || { hours: 0, count: 0 };
-        const pct = dayData.totalHours > 0 ? (rec.hours / dayData.totalHours) : 0;
+        const rec = stats.byStudio[name] || { hours: 0, count: 0 };
+        const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
         return [rec.hours, pct, rec.count];
       }
     });
-  });
 
-  SpreadsheetApp.getUi().alert('Backfill complete! Processed ' + dates.length + ' unique date(s) from ' + startOfYear.toLocaleDateString() + ' to ' + today.toLocaleDateString());
+    // Update set usage
+    _upsertDailyUsageRow_({
+      sheetName: 'Set Usage (Daily)',
+      label: stats.dateLabel,
+      labels: SET_ORDER_DAILY,
+      rowBuilder: function(name) {
+        const rec = stats.bySet[name] || { hours: 0, count: 0 };
+        const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
+        return [rec.hours, pct, rec.count];
+      }
+    });
+
+    Logger.log('Auto-updated daily usage for ' + stats.dateLabel);
+  }
 }
 
 
@@ -238,100 +257,352 @@ function backfillDailySetUsage() {
  * ================================================== */
 
 /**
- * Get daily stats for the active sheet - breaks down by day
+ * Get stats for a specific date across all sheets (avoiding duplicates)
  */
-function _getDailyStatsForActiveSheet_() {
-  const sh = SpreadsheetApp.getActiveSheet();
-  return _getDailyStatsForSheet_(sh);
+function _getStatsForSpecificDate_(targetDate) {
+  const ss = SpreadsheetApp.getActive();
+  const sheets = ss.getSheets();
+  const targetDateStr = _formatDateLabel_(targetDate);
+
+  let totalHours = 0;
+  const byStudio = {};
+  const bySet = {};
+  const seenSessions = {}; // Track unique sessions to avoid duplicates
+
+  sheets.forEach(sheet => {
+    const sheetName = sheet.getName();
+
+    // Skip non-timeline sheets
+    if (sheetName.indexOf('Usage') >= 0) return;
+    if (sheetName.indexOf('Working Hours') >= 0) return;
+    if (sheetName.indexOf('Break Plan') >= 0) return;
+    if (sheetName.indexOf('Hours Summary') >= 0) return;
+
+    try {
+      const payload = _getTimelinePayloadForSheet_(sheet);
+      const items = (payload && payload.items) ? payload.items : [];
+
+      items.forEach(it => {
+        const sessionDate = new Date(it.startMs);
+        sessionDate.setHours(0, 0, 0, 0);
+        const sessionDateStr = _formatDateLabel_(sessionDate);
+
+        // Only process items for our target date
+        if (sessionDateStr !== targetDateStr) return;
+
+        // Check if this session is crossed out (strikethrough)
+        const isCrossedOut = _isSessionCrossedOut_(sheet, it);
+        if (isCrossedOut) return;
+
+        // Create unique session ID to avoid counting duplicates
+        const sessionId = `${sessionDateStr}-${it.startMs}-${it.endMs}-${it.room}-${it.label}`;
+        if (seenSessions[sessionId]) return; // Skip duplicate
+        seenSessions[sessionId] = true;
+
+        const ms = Math.max(0, Number(it.endMs || 0) - Number(it.startMs || 0));
+        if (!ms) return;
+
+        const hours = ms / 3600000;
+        const setName = String(it.room || '').trim();
+        if (!setName) return;
+
+        const studioName = SET_TO_STUDIO_DAILY[setName.toLowerCase()] || UNKNOWN_STUDIO_DAILY;
+        totalHours += hours;
+
+        if (!bySet[setName]) bySet[setName] = { hours: 0, count: 0 };
+        bySet[setName].hours += hours;
+        bySet[setName].count += 1;
+
+        if (!byStudio[studioName]) byStudio[studioName] = { hours: 0, count: 0 };
+        byStudio[studioName].hours += hours;
+        byStudio[studioName].count += 1;
+      });
+    } catch (e) {
+      Logger.log('Error processing sheet ' + sheetName + ': ' + e.message);
+    }
+  });
+
+  if (totalHours === 0) return null;
+
+  return {
+    dateLabel: targetDateStr,
+    date: targetDate,
+    totalHours: totalHours,
+    byStudio: byStudio,
+    bySet: bySet
+  };
 }
 
 
 /**
- * Get daily stats for a specific sheet - breaks down by day
+ * Check if a session is crossed out (has strikethrough formatting)
  */
-function _getDailyStatsForSheet_(sheet) {
-  const rng = sheet.getDataRange();
-  const values = rng.getDisplayValues();
+function _isSessionCrossedOut_(sheet, item) {
+  // This is a simplified check - you may need to adjust based on your sheet structure
+  // We'll look for strikethrough in the client name cell
+  try {
+    const values = sheet.getDataRange().getDisplayValues();
 
-  if (!values.length || !values[0].length) {
-    throw new Error('Sheet looks empty.');
-  }
-
-  // Detect day segments (this function should exist in your Code Timelines.gs)
-  const { headerRowIdx, dayCols } = detectDaySegments_(values, 10);
-
-  // Parse dates from row 2 (the header row with dates)
-  const dayDates = {};
-  dayCols.forEach(seg => {
-    const cellText = values[headerRowIdx][seg.startCol] || '';
-    const parsedDate = _parseDateFromDayHeader_(cellText);
-    dayDates[seg.day] = parsedDate;
-  });
-
-  // Get timeline payload to extract session data
-  const payload = _getTimelinePayloadForSheet_(sheet);
-  const items = (payload && payload.items) ? payload.items : [];
-
-  if (!items.length) {
-    return [];
-  }
-
-  // Group items by day
-  const byDay = {};
-  items.forEach(it => {
-    const dayName = _extractDayFromGroup_(it.group);
-    if (!byDay[dayName]) {
-      byDay[dayName] = {
-        dayName: dayName,
-        date: dayDates[dayName] || new Date(),
-        items: []
-      };
+    // Search for the client name in the sheet
+    for (let r = 0; r < values.length; r++) {
+      for (let c = 0; c < values[r].length; c++) {
+        if (values[r][c] === item.label) {
+          // Check if this cell has strikethrough
+          const cell = sheet.getRange(r + 1, c + 1);
+          const fontLine = cell.getFontLine();
+          if (fontLine === 'line-through') {
+            return true;
+          }
+        }
+      }
     }
-    byDay[dayName].items.push(it);
-  });
+  } catch (e) {
+    Logger.log('Error checking strikethrough: ' + e.message);
+  }
+  return false;
+}
 
-  // Calculate stats per day
-  const dailyStats = [];
 
-  Object.keys(byDay).forEach(dayName => {
-    const dayData = byDay[dayName];
-    let totalHours = 0;
-    const byStudio = {};
-    const bySet = {};
+/**
+ * Build monthly summary HTML popup
+ */
+function _buildMonthlySummaryHtml_(type) {
+  // Get last complete month
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const monthStart = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+  const monthEnd = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
 
-    dayData.items.forEach(it => {
-      const ms = Math.max(0, Number(it.endMs || 0) - Number(it.startMs || 0));
-      if (!ms) return;
+  const monthName = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-      const hours = ms / 3600000;
-      const setName = String(it.room || '').trim();
-      if (!setName) return;
+  // Aggregate data for the month
+  let totalHours = 0;
+  const byCategory = {}; // studio or set
 
-      const studioName = SET_TO_STUDIO_DAILY[setName.toLowerCase()] || UNKNOWN_STUDIO_DAILY;
-      totalHours += hours;
+  const current = new Date(monthStart);
+  while (current <= monthEnd) {
+    const stats = _getStatsForSpecificDate_(new Date(current));
 
-      if (!bySet[setName]) bySet[setName] = { hours: 0, count: 0 };
-      bySet[setName].hours += hours;
-      bySet[setName].count += 1;
+    if (stats) {
+      totalHours += stats.totalHours;
+      const source = (type === 'studio') ? stats.byStudio : stats.bySet;
 
-      if (!byStudio[studioName]) byStudio[studioName] = { hours: 0, count: 0 };
-      byStudio[studioName].hours += hours;
-      byStudio[studioName].count += 1;
-    });
-
-    if (totalHours > 0) {
-      dailyStats.push({
-        dayName: dayName,
-        date: dayData.date,
-        dateLabel: _formatDateLabel_(dayData.date),
-        totalHours: totalHours,
-        byStudio: byStudio,
-        bySet: bySet
+      Object.keys(source).forEach(name => {
+        if (!byCategory[name]) byCategory[name] = { hours: 0, count: 0 };
+        byCategory[name].hours += source[name].hours;
+        byCategory[name].count += source[name].count;
       });
     }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  // Calculate working days in month
+  const workingDays = _countWorkingDays_(monthStart, monthEnd);
+
+  // Build HTML
+  function esc(s) {
+    s = (s == null) ? '' : String(s);
+    return s.replace(/[&<>"']/g, function(ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  const css = `
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f8f9fa; }
+      .wrap { padding: 24px; max-width: 900px; margin: 0 auto; }
+      .hdr { text-align: center; margin-bottom: 24px; }
+      .chip {
+        background: linear-gradient(135deg, #1a73e8, #6ea8fe);
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 18px;
+        box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+        display: inline-block;
+      }
+      .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      .card-label {
+        font-size: 14px;
+        color: #5f6368;
+        margin-bottom: 8px;
+      }
+      .card-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: #1a73e8;
+      }
+      .card-unit {
+        font-size: 16px;
+        color: #80868b;
+        margin-left: 4px;
+      }
+      .table-card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e8eaed;
+      }
+      th {
+        background: linear-gradient(90deg, #1a73e8, #6ea8fe);
+        color: white;
+        font-weight: 600;
+      }
+      tr:hover td {
+        background: #f8f9fa;
+      }
+      .bar-cell {
+        width: 200px;
+      }
+      .bar-container {
+        background: #e8eaed;
+        border-radius: 4px;
+        height: 20px;
+        overflow: hidden;
+      }
+      .bar-fill {
+        background: linear-gradient(90deg, #34a853, #7bc96f);
+        height: 100%;
+        transition: width 0.3s ease;
+      }
+      .actions {
+        text-align: center;
+        margin-top: 24px;
+      }
+      button {
+        padding: 10px 24px;
+        border: none;
+        border-radius: 8px;
+        background: #1a73e8;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      button:hover {
+        background: #1557b0;
+      }
+    </style>
+  `;
+
+  // Summary cards
+  let summaryHtml = '<div class="summary-cards">';
+  summaryHtml += '<div class="card">';
+  summaryHtml += '<div class="card-label">Total Hours</div>';
+  summaryHtml += '<div class="card-value">' + totalHours.toFixed(1) + '<span class="card-unit">h</span></div>';
+  summaryHtml += '</div>';
+
+  summaryHtml += '<div class="card">';
+  summaryHtml += '<div class="card-label">Working Days</div>';
+  summaryHtml += '<div class="card-value">' + workingDays + '<span class="card-unit">days</span></div>';
+  summaryHtml += '</div>';
+
+  summaryHtml += '<div class="card">';
+  summaryHtml += '<div class="card-label">Avg Hours/Day</div>';
+  summaryHtml += '<div class="card-value">' + (totalHours / workingDays).toFixed(1) + '<span class="card-unit">h</span></div>';
+  summaryHtml += '</div>';
+
+  const totalSessions = Object.values(byCategory).reduce((sum, cat) => sum + cat.count, 0);
+  summaryHtml += '<div class="card">';
+  summaryHtml += '<div class="card-label">Total Sessions</div>';
+  summaryHtml += '<div class="card-value">' + totalSessions + '</div>';
+  summaryHtml += '</div>';
+  summaryHtml += '</div>';
+
+  // Table
+  const rows = Object.keys(byCategory).map(name => ({
+    name: name,
+    hours: byCategory[name].hours,
+    count: byCategory[name].count,
+    pct: totalHours > 0 ? (byCategory[name].hours / totalHours) * 100 : 0
+  })).sort((a, b) => b.hours - a.hours);
+
+  let tableHtml = '<div class="table-card"><table><thead><tr>';
+  tableHtml += '<th>' + (type === 'studio' ? 'Studio' : 'Set') + '</th>';
+  tableHtml += '<th>Hours</th>';
+  tableHtml += '<th>Sessions</th>';
+  tableHtml += '<th>% of Total</th>';
+  tableHtml += '<th class="bar-cell">Usage</th>';
+  tableHtml += '</tr></thead><tbody>';
+
+  rows.forEach(row => {
+    tableHtml += '<tr>';
+    tableHtml += '<td><strong>' + esc(row.name) + '</strong></td>';
+    tableHtml += '<td>' + row.hours.toFixed(2) + 'h</td>';
+    tableHtml += '<td>' + row.count + '</td>';
+    tableHtml += '<td>' + row.pct.toFixed(1) + '%</td>';
+    tableHtml += '<td class="bar-cell">';
+    tableHtml += '<div class="bar-container">';
+    tableHtml += '<div class="bar-fill" style="width: ' + row.pct + '%"></div>';
+    tableHtml += '</div>';
+    tableHtml += '</td>';
+    tableHtml += '</tr>';
   });
 
-  return dailyStats;
+  tableHtml += '</tbody></table></div>';
+
+  const html = `
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        ${css}
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="hdr">
+            <div class="chip">${monthName} ${type === 'studio' ? 'Studio' : 'Set'} Usage</div>
+          </div>
+          ${summaryHtml}
+          ${tableHtml}
+          <div class="actions">
+            <button onclick="google.script.host.close()">Close</button>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return html;
+}
+
+
+/**
+ * Count working days (Mon-Fri) in a date range
+ */
+function _countWorkingDays_(startDate, endDate) {
+  let count = 0;
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) { // Not Sunday or Saturday
+      count++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
 }
 
 
@@ -382,7 +653,6 @@ function _extractDayFromGroup_(groupStr) {
 
 /**
  * Get timeline payload for a specific sheet (not just active)
- * NOTE: This is a simplified version - you may need to use getWeeklyTimelinePayload instead
  */
 function _getTimelinePayloadForSheet_(sheet) {
   const rng = sheet.getDataRange();
@@ -392,7 +662,6 @@ function _getTimelinePayloadForSheet_(sheet) {
     throw new Error('Sheet looks empty.');
   }
 
-  // Use DAY_NAMES constant (should be defined in your main Code Timelines.gs)
   const DAY_NAMES_LOCAL = (typeof DAY_NAMES !== 'undefined') ? DAY_NAMES : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   const { headerRowIdx, dayCols } = detectDaySegments_(values, 10);
