@@ -878,10 +878,11 @@ function _upsertDailyUsageRow_(opts) {
   let targetRow = -1;
 
   if (dataRows > 0) {
-    const colA = sh.getRange(2, 1, dataRows, 1).getValues();
-    const want = String(opts.label || '').trim().toLowerCase();
+    const colA = sh.getRange(2, 1, dataRows, 1).getDisplayValues(); // Use getDisplayValues instead of getValues
+    const want = String(opts.label || '').trim();
     for (let r = 0; r < dataRows; r++) {
-      if (String(colA[r][0] || '').trim().toLowerCase() === want) {
+      const existing = String(colA[r][0] || '').trim();
+      if (existing === want) {
         targetRow = r + 2;
         break;
       }
