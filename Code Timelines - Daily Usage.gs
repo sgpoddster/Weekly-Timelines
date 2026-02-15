@@ -341,44 +341,18 @@ function _getStatsForSpecificDate_(targetDate) {
   sheets.forEach(sheet => {
     const sheetName = sheet.getName();
 
-    // Skip non-timeline sheets
+    // Skip non-timeline sheets (system/utility sheets)
     if (sheetName.indexOf('Usage') >= 0) return;
     if (sheetName.indexOf('Working Hours') >= 0) return;
     if (sheetName.indexOf('Break Plan') >= 0) return;
     if (sheetName.indexOf('Hours Summary') >= 0) return;
     if (sheetName.indexOf('Photo') >= 0) return;
     if (sheetName.indexOf('Integrity') >= 0) return;
+    if (sheetName.indexOf('Chart') >= 0) return;
+    if (sheetName.indexOf('Error Log') >= 0) return;
 
-    // Skip tabs with explicit 2025 or earlier years
-    if (/\b20(1[0-9]|2[0-5])\b|\b'(0[0-9]|1[0-9]|2[0-5])\b/.test(sheetName)) {
-      return;  // Has 2025, 2024, etc. - definitely old
-    }
-
-    // For tabs without explicit years, use smart filtering
-    // If it has "2026" or "'26", definitely keep it
-    const has2026 = /\b2026\b|\b'26\b/i.test(sheetName);
-    if (!has2026) {
-      // No year marker - check if month is far from current (likely old tab)
-      const monthMatch = sheetName.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)/i);
-
-      if (monthMatch) {
-        const monthName = monthMatch[1].toLowerCase().substring(0, 3);
-        const monthMap = {jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11};
-        const tabMonth = monthMap[monthName];
-        const now = new Date();
-        const currentMonth = now.getMonth();
-
-        // Calculate month difference (handles year wrap)
-        let monthDiff = tabMonth - currentMonth;
-        if (monthDiff < -6) monthDiff += 12;  // e.g., Feb(1) - Dec(11) = -10, add 12 = 2 months ago
-        if (monthDiff > 6) monthDiff -= 12;   // e.g., Dec(11) - Feb(1) = 10, sub 12 = -2 months future
-
-        // Skip tabs that are 7+ months away (likely from previous year)
-        if (Math.abs(monthDiff) > 6) {
-          return;
-        }
-      }
-    }
+    // NO TAB NAME FILTERING - dates are parsed from Row 2 only
+    // The _parseDateFromRow2Cell_ function will determine if sessions belong to target date
 
     try {
       sheetsProcessed++;
@@ -816,6 +790,41 @@ function _extractDayFromGroup_(groupStr) {
 
 
 /**
+ * Parse actual date from Row 2 cell format: "Monday, 16 February 2026"
+ * This is the ONLY reliable source of dates - don't use tab names!
+ */
+function _parseDateFromRow2Cell_(cellValue) {
+  try {
+    const str = String(cellValue || '').trim();
+    if (!str) return null;
+
+    // Match format: "Monday, 16 February 2026" or "Tuesday, 17 February 2026"
+    const match = str.match(/(\w+),\s+(\d{1,2})\s+(\w+)\s+(\d{4})/);
+    if (!match) return null;
+
+    const day = parseInt(match[2], 10);
+    const monthName = match[3].toLowerCase();
+    const year = parseInt(match[4], 10);
+
+    // Convert month name to index
+    const monthMap = {
+      january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+      july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+    };
+    const monthIndex = monthMap[monthName];
+    if (monthIndex === undefined) return null;
+
+    const date = new Date(year, monthIndex, day);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  } catch (e) {
+    Logger.log('Error parsing date from Row 2: ' + e.message);
+    return null;
+  }
+}
+
+
+/**
  * Get timeline payload for a specific sheet (not just active)
  */
 function _getTimelinePayloadForSheet_(sheet) {
@@ -830,15 +839,19 @@ function _getTimelinePayloadForSheet_(sheet) {
 
   const { headerRowIdx, dayCols } = detectDaySegments_(values, 10);
 
-  const a1 = (values[0][0] || '').toString();
-  const weekInfo = parseWeekHeader(a1) || fallbackWeekInfo();
-
-  const mondayIndex = DAY_NAMES_LOCAL.indexOf('Monday');
+  // CRITICAL: Parse actual dates from Row 2 (headerRowIdx) instead of calculating from tab name
+  // Row 2 format: "Monday, 16 February 2026"
   const dayToDate = {};
   for (const seg of dayCols) {
-    const base = new Date(weekInfo.mondayDate);
-    base.setDate(base.getDate() + (DAY_NAMES_LOCAL.indexOf(seg.day) - mondayIndex));
-    dayToDate[seg.day] = base;
+    const cellValue = values[headerRowIdx][seg.startCol];
+    const dateFromRow2 = _parseDateFromRow2Cell_(cellValue);
+
+    if (dateFromRow2) {
+      dayToDate[seg.day] = dateFromRow2;
+    } else {
+      // Fallback: if we can't parse Row 2, skip this day entirely
+      Logger.log('WARNING: Could not parse date from Row 2 cell: "' + cellValue + '" - skipping this day');
+    }
   }
 
   const nameTimeRegex = /name\s*\/\s*time/i;
