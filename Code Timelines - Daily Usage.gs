@@ -363,6 +363,7 @@ function _getStatsForSpecificDate_(targetDate) {
         if (sessionDateStr !== targetDateStr) return;
 
         itemsFound++;
+        Logger.log('  Found session on sheet "' + sheetName + '" for ' + targetDateStr + ': ' + it.label + ' in ' + it.room + ' (' + it.group + ')');
 
         // Check if this session is crossed out (strikethrough)
         const isCrossedOut = _isSessionCrossedOut_(sheet, it);
@@ -436,6 +437,37 @@ function _isSessionCrossedOut_(sheet, item) {
     Logger.log('Error checking strikethrough: ' + e.message);
   }
   return false;
+}
+
+
+/**
+ * DEBUG: Test function to see what data exists for a specific date
+ */
+function debugDateLookup() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt('Debug Date Lookup', 'Enter date to debug (YYYY-MM-DD):', ui.ButtonSet.OK_CANCEL);
+
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+
+  const dateStr = response.getResponseText().trim();
+  const parts = dateStr.split('-');
+  const testDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+
+  Logger.clear();
+  Logger.log('=== DEBUG LOOKUP FOR ' + dateStr + ' ===');
+
+  const stats = _getStatsForSpecificDate_(testDate);
+
+  if (stats) {
+    Logger.log('\nFOUND DATA:');
+    Logger.log('Total hours: ' + stats.totalHours);
+    Logger.log('Studios: ' + JSON.stringify(stats.byStudio));
+    Logger.log('Sets: ' + JSON.stringify(stats.bySet));
+  } else {
+    Logger.log('No data found for this date');
+  }
+
+  ui.alert('Check the execution log (Extensions > Apps Script > Executions) for detailed results');
 }
 
 
