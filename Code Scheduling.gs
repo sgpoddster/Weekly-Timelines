@@ -988,9 +988,6 @@ function showBreakPlanDialogOnActiveSheet() {
   );
 }
 
-// (Optional) keep this alias if any old menu item still calls the sheet version
-function generateBreakPlanOnActiveSheet(){ return showBreakPlanDialogOnActiveSheet(); }
-
 function showStudioSetUsageDialogOnActiveSheet() {
   // Pull the same source your Operator Timeline uses
   var items = [];
