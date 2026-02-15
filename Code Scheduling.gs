@@ -54,6 +54,9 @@ function onOpen(e) {
     .addItem('📊 Monthly Studio Summary (Excl. Other)', 'showMonthlyStudioSummaryExclOther')
     .addItem('📊 Monthly Set Summary (Excl. Other)', 'showMonthlySetSummaryExclOther')
     .addSeparator()
+    .addItem('📧 Send Test Monthly Summary Email', 'sendTestMonthlySummaryEmail')
+    .addItem('⚙️ Install Monthly Email (2nd of month, 6am)', 'installMonthlyEmailTrigger')
+    .addSeparator()
     .addItem('⚙️ Install Daily Auto-Update (2am)', 'installDailyTrigger')
     .addToUi();
 

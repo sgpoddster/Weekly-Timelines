@@ -223,6 +223,103 @@ function showMonthlySetSummaryExclOther() {
   );
 }
 
+/**
+ * Send test monthly summary email to ben@poddster.com
+ */
+function sendTestMonthlySummaryEmail() {
+  sendMonthlySummaryEmail();
+  SpreadsheetApp.getUi().alert('Test email sent to ben@poddster.com');
+}
+
+/**
+ * Send monthly summary email with all 4 summaries
+ * This should be triggered on the 2nd of each month
+ */
+function sendMonthlySummaryEmail() {
+  const recipient = 'ben@poddster.com';
+
+  // Get last complete month for subject line
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const monthName = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const subject = 'Monthly Usage Summary - ' + monthName;
+
+  // Build email body with all 4 summaries
+  let emailBody = '<html><head><meta charset="UTF-8"></head><body style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px;">';
+
+  // Add header
+  emailBody += '<div style="max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
+  emailBody += '<h1 style="color: #1a73e8; text-align: center; margin-bottom: 30px;">Monthly Usage Summary - ' + monthName + '</h1>';
+
+  // Get all 4 summaries
+  try {
+    const studioHtml = _buildMonthlySummaryHtml_('studio', false);
+    const studioExclHtml = _buildMonthlySummaryHtml_('studio', true);
+    const setHtml = _buildMonthlySummaryHtml_('set', false);
+    const setExclHtml = _buildMonthlySummaryHtml_('set', true);
+
+    // Extract body content from each HTML (remove <html>, <head>, <body> tags)
+    emailBody += _extractBodyContent_(studioHtml);
+    emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
+
+    emailBody += _extractBodyContent_(studioExclHtml);
+    emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
+
+    emailBody += _extractBodyContent_(setHtml);
+    emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
+
+    emailBody += _extractBodyContent_(setExclHtml);
+
+  } catch (e) {
+    emailBody += '<p style="color: red;">Error generating summaries: ' + e.message + '</p>';
+  }
+
+  emailBody += '</div></body></html>';
+
+  // Send email
+  MailApp.sendEmail({
+    to: recipient,
+    subject: subject,
+    htmlBody: emailBody
+  });
+}
+
+/**
+ * Helper function to extract body content from HTML popup
+ * Removes the outer html/head/body tags but keeps the inner content
+ */
+function _extractBodyContent_(html) {
+  // Extract everything inside <body>...</body>
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  if (bodyMatch && bodyMatch[1]) {
+    return bodyMatch[1];
+  }
+  return html; // fallback to full HTML if parsing fails
+}
+
+/**
+ * Install monthly email trigger for the 2nd of each month at 6am
+ */
+function installMonthlyEmailTrigger() {
+  // Delete existing monthly email triggers first
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'sendMonthlySummaryEmail') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  // Create new trigger for 2nd of month at 6am
+  ScriptApp.newTrigger('sendMonthlySummaryEmail')
+    .timeBased()
+    .onMonthDay(2)
+    .atHour(6)
+    .create();
+
+  SpreadsheetApp.getUi().alert('Monthly email trigger installed!\n\nWill send summary email on the 2nd of each month at 6am to ben@poddster.com');
+}
+
 
 /* ==================================================
  * AUTO-TRIGGER FUNCTIONS
@@ -686,7 +783,13 @@ function _buildMonthlySummaryHtml_(type, excludeOther) {
   summaryHtml += '<div class="card-value">' + (hoursForCalc / workingDays).toFixed(1) + '<span class="card-unit">h</span></div>';
   summaryHtml += '</div>';
 
-  const totalSessions = Object.values(byCategory).reduce((sum, cat) => sum + cat.count, 0);
+  // Calculate total sessions - exclude "Other" if needed
+  let totalSessions = 0;
+  Object.keys(byCategory).forEach(function(label) {
+    if (excludeOther && label === 'Other') return;
+    totalSessions += byCategory[label].count;
+  });
+
   summaryHtml += '<div class="card">';
   summaryHtml += '<div class="card-label">Total Sessions</div>';
   summaryHtml += '<div class="card-value">' + totalSessions + '</div>';
