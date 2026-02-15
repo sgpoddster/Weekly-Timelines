@@ -349,6 +349,20 @@ function _getStatsForSpecificDate_(targetDate) {
     if (sheetName.indexOf('Photo') >= 0) return;
     if (sheetName.indexOf('Integrity') >= 0) return;
 
+    // Skip archived tabs from 2025 or earlier (old date format causes parsing issues)
+    // Pattern matches: 2015-2025 (4-digit) or '15-'25 (2-digit abbreviations)
+    if (/\b20(1[0-9]|2[0-5])\b|\b'(0[0-9]|1[0-9]|2[0-5])\b/.test(sheetName)) {
+      return;  // Skip silently - these are archived tabs
+    }
+
+    // Also skip tabs that have month names but no year indicator
+    // Example: "22nd - 28th Sep" without a year (likely old archived tabs)
+    const hasYear = /\b20\d{2}\b|\b'\d{2}\b/.test(sheetName);
+    const hasMonth = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(sheetName);
+    if (hasMonth && !hasYear) {
+      return;  // Skip - old tab without year indicator
+    }
+
     try {
       sheetsProcessed++;
       const payload = _getTimelinePayloadForSheet_(sheet);
