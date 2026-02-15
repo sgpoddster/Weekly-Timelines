@@ -55,9 +55,12 @@ function onOpen(e) {
     .addItem('📊 Monthly Set Summary (Excl. Other)', 'showMonthlySetSummaryExclOther')
     .addSeparator()
     .addItem('📧 Send Test Monthly Summary Email', 'sendTestMonthlySummaryEmail')
-    .addItem('⚙️ Install Monthly Email (2nd of month, 6am)', 'installMonthlyEmailTrigger')
+    .addSeparator()
+    .addItem('📈 Update Dashboard', 'updateDashboard')
     .addSeparator()
     .addItem('⚙️ Install Daily Auto-Update (2am)', 'installDailyTrigger')
+    .addItem('⚙️ Install Monthly Email (2nd of month, 6am)', 'installMonthlyEmailTrigger')
+    .addItem('⚙️ Install Dashboard Update (1st of month, 6am)', 'installDashboardTrigger')
     .addToUi();
 
   // --- Timelines menu ---
