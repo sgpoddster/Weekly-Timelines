@@ -697,8 +697,15 @@ function _buildMonthlySummaryHtml_(type, excludeOther) {
         display: inline-block;
       }
       .summary-cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        display: -webkit-box;
+        display: -ms-flexbox;
+        display: flex;
+        -webkit-box-orient: horizontal;
+        -webkit-box-direction: normal;
+        -ms-flex-direction: row;
+        flex-direction: row;
+        -ms-flex-wrap: wrap;
+        flex-wrap: wrap;
         gap: 16px;
         margin-bottom: 24px;
       }
@@ -708,6 +715,10 @@ function _buildMonthlySummaryHtml_(type, excludeOther) {
         padding: 20px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         text-align: center;
+        -webkit-box-flex: 1;
+        -ms-flex: 1 1 200px;
+        flex: 1 1 200px;
+        min-width: 200px;
       }
       .card-label {
         font-size: 14px;
