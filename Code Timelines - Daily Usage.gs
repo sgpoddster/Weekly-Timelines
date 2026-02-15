@@ -386,10 +386,17 @@ function _getStatsForSpecificDate_(targetDate) {
         if (!ms) return;
 
         const hours = ms / 3600000;
-        const setName = String(it.room || '').trim();
-        if (!setName) return;
+        const roomName = String(it.room || '').trim();
+        if (!roomName) return;
 
-        const studioName = SET_TO_STUDIO_DAILY[setName.toLowerCase()] || UNKNOWN_STUDIO_DAILY;
+        // Map room to studio (Event → Other, Iris → Studio 2, etc.)
+        const studioName = SET_TO_STUDIO_DAILY[roomName.toLowerCase()] || UNKNOWN_STUDIO_DAILY;
+
+        // Map room to set category (Event → Other, unknown rooms → Other)
+        // Known sets: Iris, Club, Nest, Exec, Nova, Soho
+        const knownSets = ['iris', 'club', 'nest', 'exec', 'nova', 'soho'];
+        const setName = knownSets.includes(roomName.toLowerCase()) ? roomName : 'Other';
+
         totalHours += hours;
 
         if (!bySet[setName]) bySet[setName] = { hours: 0, count: 0 };
