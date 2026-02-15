@@ -124,8 +124,11 @@ function backfillDailyStudioUsage() {
     endDate = new Date(today.getFullYear(), monthNum, 0);
   }
 
-  // Don't process future dates
-  if (endDate > today) endDate = new Date(today);
+  // Don't process future dates or today (today isn't finished yet)
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (endDate > yesterday) endDate = new Date(yesterday);
 
   // Process each date one by one
   const dates = [];
@@ -190,8 +193,11 @@ function backfillDailySetUsage() {
     endDate = new Date(today.getFullYear(), monthNum, 0);
   }
 
-  // Don't process future dates
-  if (endDate > today) endDate = new Date(today);
+  // Don't process future dates or today (today isn't finished yet)
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (endDate > yesterday) endDate = new Date(yesterday);
 
   const dates = [];
   const current = new Date(startDate);
