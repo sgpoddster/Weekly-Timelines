@@ -1003,7 +1003,7 @@ function showStudioSetUsageDialogOnActiveSheet() {
     items = [];
   }
   if (!items.length) {
-    SpreadsheetApp.getUi().alert('No shoots found for the active sheet (couldn't read timeline payload).');
+    SpreadsheetApp.getUi().alert("No shoots found for the active sheet (couldn't read timeline payload).");
     return;
   }
 
