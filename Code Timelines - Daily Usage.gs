@@ -7,8 +7,8 @@
  * CONSTANTS (Add these if not already in your project)
  * ================================================== */
 
-// If DAY_NAMES is not already defined in another file, uncomment this:
-// const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+// DAY_NAMES constant - required for day detection
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Canonical orders for stable columns
 const STUDIO_ORDER_DAILY = ['Studio 1', 'Studio 2', 'Studio 3', 'Studio 4', 'Other'];
@@ -922,4 +922,147 @@ function _upsertDailyUsageRow_(opts) {
   }
 
   sh.autoResizeColumns(1, totalCols);
+}
+
+
+/* ==================================================
+ * REQUIRED HELPER FUNCTIONS FROM CODE TIMELINES.GS
+ * (These must be included if not already available)
+ * ================================================== */
+
+/**
+ * Find the row that contains weekday headers and return both that row index
+ * and the [day, startCol, endCol] segments.
+ */
+function detectDaySegments_(values, maxScanRows) {
+  maxScanRows = maxScanRows || 10;
+  const rows = values.length;
+  const cols = values[0].length;
+
+  let headerRowIdx = -1;
+
+  // 1) Locate the header row
+  outer:
+  for (let r = 0; r < Math.min(rows, maxScanRows); r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = String(values[r][c] || '').trim();
+      if (!cell) continue;
+      const lc = cell.toLowerCase();
+      for (let d = 0; d < DAY_NAMES.length; d++) {
+        const dn = DAY_NAMES[d].toLowerCase();
+        if (lc.startsWith(dn)) {
+          headerRowIdx = r;
+          break outer;
+        }
+      }
+    }
+  }
+
+  if (headerRowIdx === -1) {
+    throw new Error('Could not find a row with day names in the first few rows.');
+  }
+
+  // 2) Build day segments from that header row
+  const headerRow = values[headerRowIdx];
+  const dayCols = [];
+
+  for (let c = 0; c < cols; c++) {
+    const cell = String(headerRow[c] || '').trim();
+    if (!cell) continue;
+    const lc = cell.toLowerCase();
+    for (let d = 0; d < DAY_NAMES.length; d++) {
+      const dn = DAY_NAMES[d].toLowerCase();
+      if (lc.startsWith(dn)) {
+        dayCols.push({ day: DAY_NAMES[d], startCol: c });
+        break;
+      }
+    }
+  }
+
+  if (!dayCols.length) {
+    throw new Error('No weekday headers detected on the header row.');
+  }
+
+  for (let i = 0; i < dayCols.length; i++) {
+    dayCols[i].endCol = (i < dayCols.length - 1) ? dayCols[i + 1].startCol : cols;
+  }
+
+  return { headerRowIdx, dayCols };
+}
+
+
+/**
+ * Parse the "6th - 12th October" style header in A1 to get the Monday date for that week.
+ */
+function parseWeekHeader(txt) {
+  if (!txt) return null;
+  const now = new Date();
+  const yr = now.getFullYear();
+
+  const mDash = String(txt).match(
+    /(\d{1,2})(?:st|nd|rd|th)?\s*[-–—]\s*\d{1,2}(?:st|nd|rd|th)?\s+([A-Za-z]+)(?:\s+(\d{4}))?/
+  );
+  const mOne = String(txt).match(
+    /(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)(?:\s+(\d{4}))?/
+  );
+
+  let monthName, day1, year = yr;
+  if (mDash) {
+    day1 = parseInt(mDash[1], 10);
+    monthName = mDash[2];
+    year = mDash[3] ? parseInt(mDash[3], 10) : yr;
+  } else if (mOne) {
+    day1 = parseInt(mOne[1], 10);
+    monthName = mOne[2];
+    year = mOne[3] ? parseInt(mOne[3], 10) : yr;
+  } else {
+    return null;
+  }
+
+  const mIdx = monthNameToIndex(monthName);
+  if (mIdx == null) return null;
+
+  const candidate = new Date(year, mIdx, day1);
+  const dow = candidate.getDay();
+  const mondayOffset = (dow === 0) ? -6 : (1 - dow);
+  const monday = new Date(candidate);
+  monday.setDate(monday.getDate() + mondayOffset);
+
+  return { mondayDate: monday, weekStartDay: day1, monthName: monthName };
+}
+
+
+/**
+ * Fallback week info = current week
+ */
+function fallbackWeekInfo() {
+  const now = new Date();
+  const dow = now.getDay();
+  const mondayOffset = (dow === 0) ? -6 : (1 - dow);
+  const monday = new Date(now);
+  monday.setDate(monday.getDate() + mondayOffset);
+  return { mondayDate: monday, weekStartDay: monday.getDate(), monthName: '' };
+}
+
+
+/**
+ * Convert month name to month index (0-11)
+ */
+function monthNameToIndex(monthName) {
+  const mn = String(monthName || '').toLowerCase().trim();
+  const map = {
+    'january': 0, 'jan': 0,
+    'february': 1, 'feb': 1,
+    'march': 2, 'mar': 2,
+    'april': 3, 'apr': 3,
+    'may': 4,
+    'june': 5, 'jun': 5,
+    'july': 6, 'jul': 6,
+    'august': 7, 'aug': 7,
+    'september': 8, 'sep': 8, 'sept': 8,
+    'october': 9, 'oct': 9,
+    'november': 10, 'nov': 10,
+    'december': 11, 'dec': 11
+  };
+  return (mn in map) ? map[mn] : null;
 }
