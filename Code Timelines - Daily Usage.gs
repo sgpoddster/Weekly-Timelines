@@ -32,62 +32,9 @@ const UNKNOWN_STUDIO_DAILY = 'Other';
  * PUBLIC MENU FUNCTIONS
  * ================================================== */
 
-/**
- * Write daily studio usage for YESTERDAY only
- */
-function writeDailyStudioUsage() {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-
-  const stats = _getStatsForSpecificDate_(yesterday);
-
-  if (stats && stats.totalHours > 0) {
-    _upsertDailyUsageRow_({
-      sheetName: 'Studio Usage (Daily)',
-      label: stats.dateLabel,
-      labels: STUDIO_ORDER_DAILY,
-      rowBuilder: function(name) {
-        const rec = stats.byStudio[name] || { hours: 0, count: 0 };
-        const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
-        return [rec.hours, pct, rec.count];
-      }
-    });
-
-    SpreadsheetApp.getUi().alert('Daily studio usage written for ' + stats.dateLabel + ' (' + stats.totalHours.toFixed(2) + ' hours)');
-  } else {
-    SpreadsheetApp.getUi().alert('No bookings found for ' + _formatDateLabel_(yesterday));
-  }
-}
-
-
-/**
- * Write daily set usage for YESTERDAY only
- */
-function writeDailySetUsage() {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-
-  const stats = _getStatsForSpecificDate_(yesterday);
-
-  if (stats && stats.totalHours > 0) {
-    _upsertDailyUsageRow_({
-      sheetName: 'Set Usage (Daily)',
-      label: stats.dateLabel,
-      labels: SET_ORDER_DAILY,
-      rowBuilder: function(name) {
-        const rec = stats.bySet[name] || { hours: 0, count: 0 };
-        const pct = stats.totalHours > 0 ? (rec.hours / stats.totalHours) : 0;
-        return [rec.hours, pct, rec.count];
-      }
-    });
-
-    SpreadsheetApp.getUi().alert('Daily set usage written for ' + stats.dateLabel + ' (' + stats.totalHours.toFixed(2) + ' hours)');
-  } else {
-    SpreadsheetApp.getUi().alert('No bookings found for ' + _formatDateLabel_(yesterday));
-  }
-}
+// REMOVED: writeDailyStudioUsage() and writeDailySetUsage()
+// These functions are no longer needed - use autoUpdateYesterdayData() instead
+// which is triggered automatically at 2am daily
 
 
 /**
@@ -231,7 +178,7 @@ function backfillDailySetUsage() {
  * Show monthly studio usage summary (last complete month)
  */
 function showMonthlyStudioSummary() {
-  const html = _buildMonthlySummaryHtml_('studio');
+  const html = _buildMonthlySummaryHtml_('studio', false);
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput(html).setWidth(1100).setHeight(750),
     'Monthly Studio Usage'
@@ -243,10 +190,36 @@ function showMonthlyStudioSummary() {
  * Show monthly set usage summary (last complete month)
  */
 function showMonthlySetSummary() {
-  const html = _buildMonthlySummaryHtml_('set');
+  const html = _buildMonthlySummaryHtml_('set', false);
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput(html).setWidth(1100).setHeight(750),
     'Monthly Set Usage'
+  );
+}
+
+
+/**
+ * Show monthly studio usage summary EXCLUDING "Other" category
+ * Percentages calculated based only on known studios (Studio 1-4)
+ */
+function showMonthlyStudioSummaryExclOther() {
+  const html = _buildMonthlySummaryHtml_('studio', true);
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(1100).setHeight(750),
+    'Monthly Studio Usage (Excl. Other)'
+  );
+}
+
+
+/**
+ * Show monthly set usage summary EXCLUDING "Other" category
+ * Percentages calculated based only on known sets (Iris, Club, Nest, Exec, Nova, Soho)
+ */
+function showMonthlySetSummaryExclOther() {
+  const html = _buildMonthlySummaryHtml_('set', true);
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(1100).setHeight(750),
+    'Monthly Set Usage (Excl. Other)'
   );
 }
 
@@ -510,8 +483,12 @@ function debugDateLookup() {
 
 /**
  * Build monthly summary HTML popup
+ * @param {string} type - 'studio' or 'set'
+ * @param {boolean} excludeOther - If true, exclude "Other" category from totals and percentages
  */
-function _buildMonthlySummaryHtml_(type) {
+function _buildMonthlySummaryHtml_(type, excludeOther) {
+  excludeOther = excludeOther || false;
+
   // Get last complete month
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -543,6 +520,7 @@ function _buildMonthlySummaryHtml_(type) {
 
   // Aggregate data for the month
   let totalHours = 0;
+  let totalHoursExclOther = 0; // Total excluding "Other"
   const byCategory = {}; // studio or set
   const labels = (type === 'studio') ? STUDIO_ORDER_DAILY : SET_ORDER_DAILY;
 
@@ -567,6 +545,11 @@ function _buildMonthlySummaryHtml_(type) {
           byCategory[label].hours += hours;
           byCategory[label].count += count;
           totalHours += hours;
+
+          // Track total excluding "Other"
+          if (label !== 'Other') {
+            totalHoursExclOther += hours;
+          }
         }
       });
     }
@@ -683,11 +666,14 @@ function _buildMonthlySummaryHtml_(type) {
     </style>
   `;
 
+  // Determine which total to use for calculations
+  const hoursForCalc = excludeOther ? totalHoursExclOther : totalHours;
+
   // Summary cards
   let summaryHtml = '<div class="summary-cards">';
   summaryHtml += '<div class="card">';
-  summaryHtml += '<div class="card-label">Total Hours</div>';
-  summaryHtml += '<div class="card-value">' + totalHours.toFixed(1) + '<span class="card-unit">h</span></div>';
+  summaryHtml += '<div class="card-label">Total Hours' + (excludeOther ? ' (Excl. Other)' : '') + '</div>';
+  summaryHtml += '<div class="card-value">' + hoursForCalc.toFixed(1) + '<span class="card-unit">h</span></div>';
   summaryHtml += '</div>';
 
   summaryHtml += '<div class="card">';
@@ -697,7 +683,7 @@ function _buildMonthlySummaryHtml_(type) {
 
   summaryHtml += '<div class="card">';
   summaryHtml += '<div class="card-label">Avg Hours/Day</div>';
-  summaryHtml += '<div class="card-value">' + (totalHours / workingDays).toFixed(1) + '<span class="card-unit">h</span></div>';
+  summaryHtml += '<div class="card-value">' + (hoursForCalc / workingDays).toFixed(1) + '<span class="card-unit">h</span></div>';
   summaryHtml += '</div>';
 
   const totalSessions = Object.values(byCategory).reduce((sum, cat) => sum + cat.count, 0);
@@ -707,12 +693,17 @@ function _buildMonthlySummaryHtml_(type) {
   summaryHtml += '</div>';
   summaryHtml += '</div>';
 
-  // Table
-  const rows = Object.keys(byCategory).map(name => ({
+  // Table - filter out "Other" if excludeOther is true
+  let categoryKeys = Object.keys(byCategory);
+  if (excludeOther) {
+    categoryKeys = categoryKeys.filter(name => name !== 'Other');
+  }
+
+  const rows = categoryKeys.map(name => ({
     name: name,
     hours: byCategory[name].hours,
     count: byCategory[name].count,
-    pct: totalHours > 0 ? (byCategory[name].hours / totalHours) * 100 : 0
+    pct: hoursForCalc > 0 ? (byCategory[name].hours / hoursForCalc) * 100 : 0
   })).sort((a, b) => b.hours - a.hours);
 
   let tableHtml = '<div class="table-card"><table><thead><tr>';
@@ -739,6 +730,7 @@ function _buildMonthlySummaryHtml_(type) {
 
   tableHtml += '</tbody></table></div>';
 
+  const titleSuffix = excludeOther ? ' (Excl. Other)' : '';
   const html = `
     <html>
       <head>
@@ -748,7 +740,7 @@ function _buildMonthlySummaryHtml_(type) {
       <body>
         <div class="wrap">
           <div class="hdr">
-            <div class="chip">${monthName} ${type === 'studio' ? 'Studio' : 'Set'} Usage</div>
+            <div class="chip">${monthName} ${type === 'studio' ? 'Studio' : 'Set'} Usage${titleSuffix}</div>
           </div>
           ${summaryHtml}
           ${tableHtml}
