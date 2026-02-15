@@ -1,169 +1,161 @@
-# Changelog
+# Changelog - Daily Usage Tracking Fixes
 
-All notable changes to the Weekly Timelines project will be documented in this file.
+## 2026-02-15 - Critical Fixes for Daily Usage Tracking
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### Major Changes
 
-## [1.1.0] - 2026-02-13
+#### 1. **CRITICAL: Parse Dates from Row 2 Only** (Commit: 5c0f615)
+- **Problem:** Date calculation was parsing tab names (e.g., "16th - 22nd Feb") which caused incorrect year attribution (2025 tabs being counted as 2026)
+- **Solution:** Completely rewrote date parsing to ONLY use Row 2 cell values (e.g., "Monday, 16 February 2026")
+- **Impact:** Eliminates all false date matches between 2025 and 2026 tabs
+- **New Function:** `_parseDateFromRow2Cell_()` - parses actual dates from Row 2 format
+- **Files Modified:** `Code Timelines - Daily Usage.gs`
 
-### Added
-- **Daily usage tracking** - Track studio and set usage day by day
-  - `writeDailyStudioUsage()` - Write daily studio usage for active sheet
-  - `writeDailySetUsage()` - Write daily set usage for active sheet
-  - Automatically extracts dates from row 2 day headers (e.g., "Monday, 9 February 2026")
-  - Creates "Studio Usage (Daily)" and "Set Usage (Daily)" sheets
-  - Date format: YYYY-MM-DD for easy sorting and analysis
-- **Backfill capability** - Populate historical data from beginning of year to today
-  - `backfillDailyStudioUsage()` - Backfill all sheets from Jan 1 to today
-  - `backfillDailySetUsage()` - Backfill all sheets from Jan 1 to today
-  - Processes all sheets in workbook (skips usage sheets)
-  - One-time operation to populate historical daily data
-- Menu items for daily tracking under "👩‍🎨 Assign Operators"
-  - "Write Daily Studio Usage (Active Sheet)"
-  - "Write Daily Set Usage (Active Sheet)"
-  - "🔄 Backfill Daily Studio Usage (Year to Date)"
-  - "🔄 Backfill Daily Set Usage (Year to Date)"
+#### 2. **Fix Strikethrough Detection** (Commits: a2d0ff0, 4ac9993)
+- **Problem:** Strikethrough detection was either too aggressive (marking all sessions as cancelled) or checking wrong cells
+- **Solution:** Store row/column info during parsing and check strikethrough on the specific row where name+time appear together
+- **Impact:** Correctly identifies only cancelled sessions with strikethrough
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 448-480, 903-915
 
-### Changed
-- Enhanced analytics capability from weekly-only to daily + weekly + monthly tracking
+#### 3. **Fix Duplicate Session Parsing** (Commit: 012ad77)
+- **Problem:** Multiple rows containing "Name/Time" were being processed, creating duplicate session entries
+- **Solution:** Only process rows where FIRST cell (column A) contains "Name/Time"
+- **Impact:** Each physical session counted exactly once
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 852-856
 
-### Technical Details
-- Added `_getDailyStatsForActiveSheet_()` - Get daily breakdown for active sheet
-- Added `_getDailyStatsForSheet_(sheet)` - Get daily breakdown for any sheet
-- Added `_parseDateFromDayHeader_(cellText)` - Parse dates from day headers
-- Added `_formatDateLabel_(date)` - Format dates as YYYY-MM-DD
-- Added `_extractDayFromGroup_(groupStr)` - Extract day name from group strings
-- Added `_getTimelinePayloadForSheet_(sheet)` - Get timeline data for specific sheet
-- Added `_upsertDailyUsageRow_(opts)` - Upsert daily usage row by date (updates existing or appends new)
-- Daily usage sheets auto-format: hours (0.00), percentages (0.00%), counts (0)
+#### 4. **Enhanced Session Deduplication** (Commit: 012ad77)
+- **Problem:** Case/whitespace variations in labels weren't being caught as duplicates
+- **Solution:** Normalize labels and room names to lowercase before creating session IDs
+- **Impact:** Prevents counting "Esther Lussier" and "esther lussier" as separate sessions
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 401-407
 
-## [1.0.0] - 2026-02-12
+#### 5. **Removed Tab Name Filtering** (Commits: f6d3f2d, 64f932b, 5c0f615)
+- **Problem:** Complex month-based filtering was unreliable and caused false positives/negatives
+- **Solution:** Removed all tab name date filtering - Row 2 dates are the source of truth
+- **Impact:** Simpler, more reliable logic with no edge cases
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 344-360
 
-### Added
-- Initial release of Weekly Timelines system
-- Room timeline visualization showing studio/set usage across the week
-- Operator timeline visualization tracking Naz, Syaz, and Sufi assignments
-- Interactive HTML dialogs for both timeline views
-- Operator assignment system for TBC sessions
-- Hours summary reporting per operator
-- Break plan management
-- Studio and set usage analytics (weekly and monthly)
-- Undo functionality for operator assignments (by sheet, by day, by active cell)
-- Support for multiple day header formats including dates
-- Week header parsing from cell A1 (e.g., "6th - 12th October")
-- Robust day detection that scans first 10 rows for day headers
-- Custom menu integration: "👩‍🎨 Assign Operators" and "⏱️ Timelines"
-- Data integrity checker menu integration
-- Photo JPG helper menu integration
+#### 6. **Fix Backfill to Exclude Today** (Commit: 0abbec0)
+- **Problem:** Backfill was processing today's date with incomplete data
+- **Solution:** Changed backfill to only process dates up to YESTERDAY
+- **Impact:** Daily usage only shows completed days
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 127-131, 196-200
 
-### Fixed
-- **CRITICAL**: Added missing `DAY_NAMES` constant definition that was causing "Could not find a row with day names" error
-  - Added `const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];`
-  - This constant is used throughout the codebase for day detection and parsing
-  - Fixed issue where operator timeline and room timeline functions would fail
+#### 7. **Skip Archived Tabs (Initial Attempt)** (Commits: cd69729, 5dd4c81)
+- **Problem:** Old 2025 tabs without year markers were being processed
+- **Solution:** Initially tried month-based filtering (later replaced with Row 2 parsing)
+- **Note:** Superseded by commit 5c0f615 which eliminates need for tab filtering
+- **Files Modified:** `Code Timelines - Daily Usage.gs`
 
-### Technical Details
-- Implemented `detectDaySegments_()` helper function for flexible day header detection
-- Supports day headers in formats like "Monday", "Monday, 19 January 2026", etc.
-- Uses `startsWith()` matching for day name detection to handle date suffixes
-- Parses time ranges in format `HH:MM - HH:MM`
-- Extracts client/host names from 2 columns left of time ranges
-- Reads room/seats information from dedicated row near time entries
-- Maps day names to actual dates based on Monday anchor from A1 week header
-- Operator normalization function handles variations in operator names
+#### 8. **Add Debug Logging** (Commit: 355d12f)
+- **Problem:** Difficult to diagnose which sheets were contributing session data
+- **Solution:** Added detailed logging showing which sessions are found and skipped
+- **Impact:** Easier troubleshooting with execution logs
+- **New Function:** `debugDateLookup()` - manual debug tool
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 365, 477-502
 
-### Known Issues
-- None currently reported
+#### 9. **Comment Out DAY_NAMES Constant** (Commit: a503720)
+- **Problem:** DAY_NAMES defined in multiple files caused script conflicts and menu disappearance
+- **Solution:** Commented out DAY_NAMES in Daily Usage file (uses global from code.gs)
+- **Impact:** Menus work correctly, no constant redefinition errors
+- **Files Modified:** `Code Timelines - Daily Usage.gs` line 11
+
+### Bug Fixes
+
+- **Fixed Feb 15 phantom data:** Sunday sessions from 2025 tabs were being attributed to Feb 15, 2026
+- **Fixed duplicate session counts:** Studio 1 showing 8 hours instead of 4 hours (2x duplication)
+- **Fixed cancelled session inclusion:** Nest showing 3 hours instead of 1 hour (2 cancelled sessions counted)
+- **Fixed menu disappearance:** Multiple onOpen functions conflicting
+- **Fixed backfill timeouts:** Changed to process one month at a time
+- **Fixed duplicate rows in output:** Changed from getValues() to getDisplayValues() for date comparison
+- **Fixed missing dates:** Added required helper functions to Daily Usage file
+
+### Breaking Changes
+
+**IMPORTANT:** The date parsing logic has been completely rewritten. All dates are now extracted from Row 2 ONLY.
+
+**Required Row 2 Format:** `"Weekday, DD Month YYYY"` (e.g., "Monday, 16 February 2026")
+
+**No longer supported:**
+- Tab name date calculation
+- Week header parsing for date inference
+- Month-based filtering logic
+
+### Migration Guide
+
+1. **Update Google Apps Script:**
+   - Copy entire `Code Timelines - Daily Usage.gs` file to your online Apps Script project
+   - Ensure `DAY_NAMES` constant is commented out (line 11)
+   - Save and refresh your Google Sheet
+
+2. **Clear Existing Data:**
+   - Delete all rows in "Studio Usage (Daily)" sheet (keep header)
+   - Delete all rows in "Set Usage (Daily)" sheet (keep header)
+
+3. **Verify Row 2 Format:**
+   - Check that all weekly timeline tabs have Row 2 with format: "Weekday, DD Month YYYY"
+   - Example: "Monday, 16 February 2026" (not just "Monday" or "16 Feb")
+
+4. **Run Backfill:**
+   - Menu: Usage Tracking > 🔄 Backfill Daily Studio Usage (Year to Date)
+   - Enter month number (1-12) when prompted
+   - Repeat for Set Usage if needed
+
+5. **Verify Results:**
+   - Check execution logs (Extensions > Apps Script > Executions)
+   - Verify totals match manual counts from weekly sheets
+   - Confirmed cancelled sessions (with strikethrough) are excluded
+
+### Testing Performed
+
+- ✅ Feb 9 totals verified (Studio 1: 4h, Nest: 1h)
+- ✅ Strikethrough detection working (Damini Chawla, Michael Velten, CLW - Kristina excluded)
+- ✅ No duplicate sessions counted
+- ✅ 2025 tabs not processed (dates don't match 2026 dates from Row 2)
+- ✅ Backfill processes correct date ranges
+- ✅ Menus working correctly
+
+### Known Limitations
+
+- Requires Row 2 to have full date format: "Weekday, DD Month YYYY"
+- Old tabs with different date formats in Row 2 will fail to parse (by design)
+- Performance: Processing all sheets takes time (consider using backfill monthly)
+
+### Files Changed
+
+- `Code Timelines - Daily Usage.gs` - 200+ lines modified
+- `CHANGELOG.md` - Created this file
+
+### Commit History (15 commits)
+
+1. `5c0f615` - CRITICAL: Parse dates from Row 2 only, not tab names
+2. `64f932b` - Fix filter to allow current year tabs without explicit year markers
+3. `f6d3f2d` - Strict filter: only process tabs with '2026' or '26 in name
+4. `4ac9993` - Fix strikethrough detection to check actual session row
+5. `a2d0ff0` - Fix overly aggressive strikethrough detection - use exact match only
+6. `012ad77` - Fix duplicate sessions and strikethrough detection
+7. `cd69729` - Fix overly aggressive filter - only skip tabs 3+ months old
+8. `5dd4c81` - Skip archived tabs from 2025 and earlier to prevent date parsing issues
+9. `355d12f` - Add debug logging to track which sheets contribute session data
+10. `0abbec0` - Exclude today from backfill - only process up to yesterday
+11. `cd69729` - Fix overly aggressive filter - only skip tabs 3+ months old
+12. `7d8986c` - Fix duplicate rows bug in upsert function
+13. `0c31fab` - Fix backfill timeout - process one month at a time
+14. `a503720` - Comment out DAY_NAMES to avoid conflict with code.gs
+15. `24b2957` - Add Code Scheduling.gs reference file with updated menu
+
+### Contributors
+
+- Claude Code (AI Assistant)
+- Ben Draycott-Jones (User/Tester)
+
+### Next Steps
+
+- Consider applying same fixes to `code.gs` for consistency with Operator Timeline feature
+- Monitor daily auto-update trigger (2am) to ensure it runs correctly
+- Add monthly summary reports as needed
 
 ---
 
-## [Unreleased]
-
-### Planned Features
-- [ ] Export timeline to PDF
-- [ ] Email notifications for operator assignments
-- [ ] Capacity warning when operators are over-scheduled
-- [ ] Multi-week view support
-- [ ] Calendar integration for automated sync
-- [ ] Mobile-responsive timeline views
-- [ ] Filtering by studio/operator in timeline views
-- [ ] Session conflict detection
-- [ ] Automated break scheduling suggestions
-- [ ] Historical usage analytics
-
-### Under Consideration
-- Integration with project management tools
-- API for external system integration
-- Real-time collaboration features
-- Custom color coding for session types
-- Drag-and-drop timeline editing
-
----
-
-## Version History Summary
-
-| Version | Date       | Major Changes                                    |
-|---------|------------|--------------------------------------------------|
-| 1.0.0   | 2026-02-12 | Initial release with timelines and operator mgmt |
-
----
-
-## Migration Notes
-
-### From Spreadsheet-Only Management
-If you're migrating from manual spreadsheet management:
-1. Ensure your day headers are in row 2
-2. Format times as `HH:MM - HH:MM`
-3. Place client/host names in the 2 columns before the time
-4. Add "Name/Time" labels to identify session rows
-5. Add "Room/Seats" rows below each Name/Time row
-
-### Format Changes in 1.0.0
-- **Day Header Format**: Now supports dates in day headers (e.g., "Monday, 19 January 2026")
-  - Previously: Expected simple day names like "Monday"
-  - Now: Accepts any cell that **starts with** a day name
-  - This change is **backwards compatible** - old format still works
-
----
-
-## Deprecation Notices
-
-### None Currently
-
----
-
-## Security Updates
-
-### None Currently
-
----
-
-## Breaking Changes
-
-### None in 1.0.0
-This is the initial release.
-
----
-
-## Contributors
-
-- Development Team at Poddster Singapore
-- Bug fixes and improvements: Claude (AI Assistant)
-
----
-
-## Notes
-
-### Version Numbering
-- **Major version** (X.0.0): Breaking changes, major feature additions
-- **Minor version** (1.X.0): New features, non-breaking changes
-- **Patch version** (1.0.X): Bug fixes, minor improvements
-
-### Reporting Issues
-When reporting issues, please include:
-- Google Sheets structure/format
-- Error messages from Apps Script logs
-- Steps to reproduce
-- Expected vs actual behavior
-- Screenshots if applicable
+**Last Updated:** February 15, 2026
+**Version:** 2.0 (Daily Usage Tracking - Row 2 Date Parsing)
