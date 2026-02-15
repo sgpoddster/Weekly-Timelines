@@ -401,7 +401,10 @@ function _getStatsForSpecificDate_(targetDate) {
         if (isCrossedOut) return;
 
         // Create unique session ID to avoid counting duplicates
-        const sessionId = `${sessionDateStr}-${it.startMs}-${it.endMs}-${it.room}-${it.label}`;
+        // Normalize label and room to catch case/whitespace variations
+        const normalizedLabel = String(it.label || '').trim().toLowerCase();
+        const normalizedRoom = String(it.room || '').trim().toLowerCase();
+        const sessionId = `${sessionDateStr}-${it.startMs}-${it.endMs}-${normalizedRoom}-${normalizedLabel}`;
         if (seenSessions[sessionId]) return; // Skip duplicate
         seenSessions[sessionId] = true;
 
@@ -444,28 +447,34 @@ function _getStatsForSpecificDate_(targetDate) {
 
 /**
  * Check if a session is crossed out (has strikethrough formatting)
+ * Improved to handle case-insensitive matching and merged cells
  */
 function _isSessionCrossedOut_(sheet, item) {
-  // This is a simplified check - you may need to adjust based on your sheet structure
-  // We'll look for strikethrough in the client name cell
   try {
     const values = sheet.getDataRange().getDisplayValues();
+    const formats = sheet.getDataRange().getFontLines();
 
-    // Search for the client name in the sheet
+    // Normalize the search label
+    const searchLabel = String(item.label || '').trim().toLowerCase();
+    if (!searchLabel) return false;
+
+    // Search for cells containing this label (case-insensitive, partial match)
     for (let r = 0; r < values.length; r++) {
       for (let c = 0; c < values[r].length; c++) {
-        if (values[r][c] === item.label) {
-          // Check if this cell has strikethrough
-          const cell = sheet.getRange(r + 1, c + 1);
-          const fontLine = cell.getFontLine();
-          if (fontLine === 'line-through') {
+        const cellValue = String(values[r][c] || '').trim().toLowerCase();
+
+        // Check if cell contains the label (partial match for merged cells)
+        if (cellValue.includes(searchLabel) || searchLabel.includes(cellValue)) {
+          // Check strikethrough formatting
+          if (formats[r][c] === 'line-through') {
+            Logger.log('  → Session "' + item.label + '" is struck through - SKIPPING');
             return true;
           }
         }
       }
     }
   } catch (e) {
-    Logger.log('Error checking strikethrough: ' + e.message);
+    Logger.log('Error checking strikethrough for "' + item.label + '": ' + e.message);
   }
   return false;
 }
@@ -850,10 +859,11 @@ function _getTimelinePayloadForSheet_(sheet) {
   const rows = [];
 
   for (let r = headerRowIdx + 1; r < values.length; r++) {
-    const rowHasNameTime = values[r]
-      .slice(0, Math.min(6, values[r].length))
-      .some(v => nameTimeRegex.test(String(v || '')));
-    if (!rowHasNameTime) continue;
+    // Only process rows where the FIRST cell contains "Name/Time"
+    // This prevents processing duplicate rows for the same session
+    const firstCell = String(values[r][0] || '').trim().toLowerCase();
+    const isNameTimeRow = /^name\s*\/\s*time/i.test(firstCell);
+    if (!isNameTimeRow) continue;
 
     const roomRowIdx = findRowIndex(/\broom\b.*\bseats\b/i, r + 1);
 
