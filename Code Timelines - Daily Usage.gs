@@ -245,35 +245,35 @@ function sendMonthlySummaryEmail() {
 
   const subject = 'Monthly Usage Summary - ' + monthName;
 
-  // Build email body with all 4 summaries
-  let emailBody = '<html><head><meta charset="UTF-8"></head><body style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px;">';
+  // Get all 4 summaries
+  const studioHtml = _buildMonthlySummaryHtml_('studio', false);
+  const studioExclHtml = _buildMonthlySummaryHtml_('studio', true);
+  const setHtml = _buildMonthlySummaryHtml_('set', false);
+  const setExclHtml = _buildMonthlySummaryHtml_('set', true);
+
+  // Extract CSS from the first summary (all have same CSS)
+  const css = _extractCss_(studioHtml);
+
+  // Build email with all styling preserved
+  let emailBody = '<html><head><meta charset="UTF-8">';
+  emailBody += css; // Include all the CSS
+  emailBody += '</head><body style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px;">';
 
   // Add header
   emailBody += '<div style="max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
   emailBody += '<h1 style="color: #1a73e8; text-align: center; margin-bottom: 30px;">Monthly Usage Summary - ' + monthName + '</h1>';
 
-  // Get all 4 summaries
-  try {
-    const studioHtml = _buildMonthlySummaryHtml_('studio', false);
-    const studioExclHtml = _buildMonthlySummaryHtml_('studio', true);
-    const setHtml = _buildMonthlySummaryHtml_('set', false);
-    const setExclHtml = _buildMonthlySummaryHtml_('set', true);
+  // Add all 4 summaries with their content
+  emailBody += _extractBodyContent_(studioHtml);
+  emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
 
-    // Extract body content from each HTML (remove <html>, <head>, <body> tags)
-    emailBody += _extractBodyContent_(studioHtml);
-    emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
+  emailBody += _extractBodyContent_(studioExclHtml);
+  emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
 
-    emailBody += _extractBodyContent_(studioExclHtml);
-    emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
+  emailBody += _extractBodyContent_(setHtml);
+  emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
 
-    emailBody += _extractBodyContent_(setHtml);
-    emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
-
-    emailBody += _extractBodyContent_(setExclHtml);
-
-  } catch (e) {
-    emailBody += '<p style="color: red;">Error generating summaries: ' + e.message + '</p>';
-  }
+  emailBody += _extractBodyContent_(setExclHtml);
 
   emailBody += '</div></body></html>';
 
@@ -286,16 +286,33 @@ function sendMonthlySummaryEmail() {
 }
 
 /**
+ * Helper function to extract CSS from HTML
+ */
+function _extractCss_(html) {
+  // Extract <style>...</style> tags
+  const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  if (styleMatch && styleMatch[0]) {
+    return styleMatch[0];
+  }
+  return '';
+}
+
+/**
  * Helper function to extract body content from HTML popup
- * Removes the outer html/head/body tags but keeps the inner content
+ * Keeps the content inside the .wrap div
  */
 function _extractBodyContent_(html) {
-  // Extract everything inside <body>...</body>
+  // Extract the .wrap div content (everything inside <div class="wrap">...</div>)
+  const wrapMatch = html.match(/<div class="wrap">([\s\S]*?)<div class="actions">/i);
+  if (wrapMatch && wrapMatch[1]) {
+    return wrapMatch[1];
+  }
+  // Fallback: extract everything inside <body>...</body>
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   if (bodyMatch && bodyMatch[1]) {
     return bodyMatch[1];
   }
-  return html; // fallback to full HTML if parsing fails
+  return html;
 }
 
 /**
