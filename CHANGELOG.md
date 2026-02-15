@@ -4,6 +4,50 @@
 
 ### Latest Updates
 
+#### 19. **Fix Email Formatting to Match Popup Styling** (Commit: 6b123bb)
+- **Problem:** Monthly summary emails were displaying as plain text without styling
+- **Solution:** Extract and include CSS from summary popups in email HTML
+- **New Functions:**
+  - `_extractCss_()` - Extracts `<style>` tags from HTML for email inclusion
+  - Enhanced `_extractBodyContent_()` - Properly extracts .wrap content without Close button
+- **Impact:** Email now looks identical to popup windows with all styling:
+  - Gradient backgrounds and blue header chips
+  - Cards with shadows and proper spacing
+  - Color-coded table headers
+  - Green usage bars with proper width percentages
+  - Professional typography matching popup design
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 234-298
+
+#### 18. **Fix Session Count Exclusion and Add Monthly Email Summary** (Commit: eaa3095)
+- **Problem:** Total Sessions count was showing all sessions (107) even in exclusion mode
+- **Solution:** Filter session count to exclude "Other" sessions when `excludeOther=true`
+- **New Features:**
+  - Monthly summary email functionality sends all 4 summaries to ben@poddster.com
+  - Automatic trigger for 2nd of each month at 6am
+  - Test email function for immediate testing
+- **New Functions:**
+  - `sendMonthlySummaryEmail()` - Main email function with all 4 summaries
+  - `sendTestMonthlySummaryEmail()` - Test version for immediate sending
+  - `installMonthlyEmailTrigger()` - Sets up monthly email automation
+  - `_extractBodyContent_()` - Helper to extract HTML body content for email
+- **Email Contents:** (in order)
+  1. Studio Usage (with Other)
+  2. Studio Usage (Excl. Other)
+  3. Set Usage (with Other)
+  4. Set Usage (Excl. Other)
+- **Menu Items Added:**
+  - 📧 Send Test Monthly Summary Email
+  - ⚙️ Install Monthly Email (2nd of month, 6am)
+- **Confirmed:** Month logic shows last complete month (Feb in March, etc.)
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 226-318; `Code Scheduling.gs` lines 54-59
+
+#### 17. **Add Menu Emojis to Match Existing Style** (Commit: a703855)
+- **Changes:**
+  - Added 🎨 emoji to "Assign Operators" menu
+  - Added 🕐 emoji to "Timelines" menu
+  - Matches existing emoji style (🎬 for Sanity Checker, 📸 for Photo Helper)
+- **Files Modified:** `Code Scheduling.gs` lines 35, 61
+
 #### 16. **Add Monthly Summary Exclusion Mode and Menu Cleanup** (Commit: 8acad69)
 - **Changes:**
   - Removed "Write Daily Studio Usage (Yesterday)" and "Write Daily Set Usage (Yesterday)" menu items and functions (replaced by `autoUpdateYesterdayData` which runs at 2am daily)

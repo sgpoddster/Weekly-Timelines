@@ -24,9 +24,13 @@ This project provides an integrated system for tracking podcast recording sessio
 - Hours summary by operator
 - Studio and set usage tracking (weekly, daily, and monthly)
 - **Daily usage tracking** - Track studio/set usage day by day with automatic date extraction
-- **Backfill capability** - Populate historical data from beginning of year to today
-- Detailed session breakdowns
+- **Automatic daily updates** - Runs at 2am daily to update yesterday's data automatically
+- **Backfill capability** - Populate historical data for any month
+- **Monthly summaries** - Beautiful popup summaries with charts and usage bars
+- **Monthly summary emails** - Automatic email reports on the 2nd of each month
+- Detailed session breakdowns with strikethrough detection for cancelled sessions
 - Usage statistics across multiple sheets
+- Exclusion mode to view summaries without "Other/Event" category
 
 ### 🎬 Integration Features
 - Session data integrity checking
@@ -38,12 +42,14 @@ This project provides an integrated system for tracking podcast recording sessio
 
 ```
 SG Weekly Timelines/
-├── code.gs                      # Main Google Apps Script file
-├── timeline by room.html        # Room timeline visualization UI
-├── timeline by operator.html    # Operator timeline visualization UI
-├── README.md                    # This file
-├── CHANGELOG.md                 # Version history and changes
-└── ARCHITECTURE.md              # Technical architecture documentation
+├── Code Scheduling.gs                  # Main menu and scheduling functions
+├── Code Timelines - Daily Usage.gs     # Daily/monthly usage tracking
+├── timeline by room.html               # Room timeline visualization UI
+├── timeline by operator.html           # Operator timeline visualization UI
+├── README.md                           # This file
+├── CHANGELOG.md                        # Version history and changes
+├── ARCHITECTURE.md                     # Technical architecture documentation
+└── IMPLEMENTATION_STATUS.md            # Daily usage implementation guide
 ```
 
 ## Installation
@@ -129,17 +135,32 @@ The script automatically detects day headers in these formats:
 
 ### Tracking Daily Usage
 
-1. **Write Daily Usage for Active Sheet**
-   - Studio usage: `👩‍🎨 Assign Operators > Write Daily Studio Usage (Active Sheet)`
-   - Set usage: `👩‍🎨 Assign Operators > Write Daily Set Usage (Active Sheet)`
-   - This extracts dates from row 2 and creates one row per day
+1. **Automatic Daily Updates**
+   - Install trigger: `🎨 Assign Operators > ⚙️ Install Daily Auto-Update (2am)`
+   - Runs automatically at 2am every day
+   - Updates yesterday's studio and set usage data
+   - No manual intervention required
 
-2. **Backfill Historical Data** (One-time operation)
-   - Studio backfill: `👩‍🎨 Assign Operators > 🔄 Backfill Daily Studio Usage (Year to Date)`
-   - Set backfill: `👩‍🎨 Assign Operators > 🔄 Backfill Daily Set Usage (Year to Date)`
-   - Processes all sheets from January 1st to today
+2. **Backfill Historical Data**
+   - Studio backfill: `🎨 Assign Operators > 🔄 Backfill Daily Studio Usage`
+   - Set backfill: `🎨 Assign Operators > 🔄 Backfill Daily Set Usage`
+   - Select any month to backfill data
    - Creates/updates "Studio Usage (Daily)" and "Set Usage (Daily)" sheets
    - Date format: YYYY-MM-DD for easy sorting
+
+3. **View Monthly Summaries**
+   - `🎨 Assign Operators > 📊 Monthly Studio Summary` - All studios including Event/Other
+   - `🎨 Assign Operators > 📊 Monthly Set Summary` - All sets including Event/Other
+   - `🎨 Assign Operators > 📊 Monthly Studio Summary (Excl. Other)` - Known studios only
+   - `🎨 Assign Operators > 📊 Monthly Set Summary (Excl. Other)` - Known sets only
+   - Shows data for last complete month with beautiful charts and usage bars
+   - Displays total hours, working days, average hours/day, session counts, and percentages
+
+4. **Monthly Email Reports**
+   - Install trigger: `🎨 Assign Operators > ⚙️ Install Monthly Email (2nd of month, 6am)`
+   - Sends automatic email on 2nd of each month at 6am to ben@poddster.com
+   - Contains all 4 monthly summaries (Studio/Set with and without "Other")
+   - Test it: `🎨 Assign Operators > 📧 Send Test Monthly Summary Email`
 
 ## Configuration
 

@@ -7,43 +7,72 @@ The Weekly Timelines system is a Google Apps Script application that integrates 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Google Sheets UI                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Assign     │  │  Timelines   │  │ Data Checker │     │
-│  │  Operators   │  │    Menu      │  │    Menu      │     │
-│  └──────────────┘  └──────────────┘  └──────────────┘     │
-└────────────────────────┬────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Google Sheets UI                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │
+│  │ 🎨 Assign    │  │ 🕐 Timelines │  │ 🎬 Data      │  │ 📸 Photo   │ │
+│  │  Operators   │  │    Menu      │  │   Checker    │  │   Helper   │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └────────────┘ │
+└────────────────────────┬────────────────────────────────────────────────┘
                          │
                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Google Apps Script (code.gs)                   │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Menu System (onOpen)                                │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Core Parsing Engine                                 │  │
-│  │  • detectDaySegments_()                             │  │
-│  │  • parseWeekHeader()                                │  │
-│  │  • Time/date parsing utilities                      │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Timeline Generators                                 │  │
-│  │  • getWeeklyTimelinePayload()                       │  │
-│  │  • getOperatorTimelinePayload()                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Google Apps Script Layer                             │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  Code Scheduling.gs - Menu System & Core Functions               │ │
+│  │  • onOpen() - Registers all menus                                 │ │
+│  │  • Operator assignment (assignEditorsOnActiveSheet)               │ │
+│  │  • Analytics (hours summary, break plans)                         │ │
+│  │  • Weekly studio/set usage                                        │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  Code Timelines - Daily Usage.gs - Daily/Monthly Tracking        │ │
+│  │  • Daily usage parsing (parseSheetForDates)                       │ │
+│  │  • Automatic updates (autoUpdateYesterdayData at 2am)             │ │
+│  │  • Monthly summaries (showMonthlyStudioSummary, etc.)             │ │
+│  │  • Email reports (sendMonthlySummaryEmail)                        │ │
+│  │  • Backfill operations (backfillDailyStudioUsage)                 │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  Core Parsing Engine                                              │ │
+│  │  • detectDaySegments_() - Locate day columns                      │ │
+│  │  • parseWeekHeader() - Extract week dates                         │ │
+│  │  • _parseDateFromRow2Cell_() - Extract dates from Row 2           │ │
+│  │  • _isSessionCrossedOut_() - Detect strikethrough sessions        │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  Timeline Generators                                              │ │
+│  │  • getWeeklyTimelinePayload() - Room timeline data                │ │
+│  │  • getOperatorTimelinePayload() - Operator timeline data          │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+└────────────────────────┬────────────────────────────────────────────────┘
                          │
                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│              HTML Timeline Dialogs                          │
-│  ┌──────────────────────┐  ┌──────────────────────┐        │
-│  │ timeline by room.html│  │ timeline by          │        │
-│  │ • Visual timeline    │  │ operator.html        │        │
-│  │ • Session details    │  │ • Operator view      │        │
-│  │ • Room grouping      │  │ • Workload tracking  │        │
-│  └──────────────────────┘  └──────────────────────┘        │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Output & Visualization Layer                         │
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────┐ │
+│  │ HTML Timeline Dialogs│  │ Monthly Summary      │  │ Email Reports│ │
+│  │ • timeline by room   │  │ Popups               │  │              │ │
+│  │ • timeline by        │  │ • Styled cards       │  │ • Styled     │ │
+│  │   operator           │  │ • Usage charts       │  │   summaries  │ │
+│  │                      │  │ • Progress bars      │  │ • Sent 2nd   │ │
+│  │                      │  │                      │  │   of month   │ │
+│  └──────────────────────┘  └──────────────────────┘  └──────────────┘ │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ Daily Usage Sheets (Auto-maintained)                            │   │
+│  │ • Studio Usage (Daily) - One row per date                       │   │
+│  │ • Set Usage (Daily) - One row per date                          │   │
+│  │ Format: Date | Studio1 Hours | Studio1 Count | ... | Total      │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Time-Based Triggers                                  │
+│  • Daily 2am: autoUpdateYesterdayData() - Update previous day           │
+│  • Monthly 2nd at 6am: sendMonthlySummaryEmail() - Send report          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Component Architecture
@@ -382,6 +411,297 @@ getOperatorFromSegment(rowIdx, seg):
 ```
 
 **Rationale**: Handles merged cells where operator name spans multiple session rows.
+
+### 5. Daily Usage Tracking System
+
+**File**: `Code Timelines - Daily Usage.gs`
+
+The daily usage tracking system provides automated data collection, monthly summaries, and email reporting for studio and set usage.
+
+#### 5.1 Core Architecture
+
+**Purpose**: Track daily studio/set usage hours and session counts, with automatic updates and monthly reporting.
+
+**Data Flow**:
+```
+Weekly Timeline Sheets (Row 2 with dates)
+   ↓
+Parse dates from Row 2 ("Monday, 16 February 2026")
+   ↓
+Extract sessions for each date
+   ↓
+Check strikethrough (cancelled sessions)
+   ↓
+Deduplicate sessions
+   ↓
+Aggregate by studio/set
+   ↓
+Write to Daily Usage Sheets (upsert by date)
+   ↓
+Monthly summaries read from Daily sheets
+   ↓
+Email reports sent monthly
+```
+
+#### 5.2 Date Parsing System
+
+**Function**: `_parseDateFromRow2Cell_(cellValue)`
+**Critical Design Decision**: **ONLY** parse dates from Row 2 cells, never from tab names.
+
+**Why Row 2 Only?**
+- Tab names vary in format ("16th - 22nd Feb", "22nd - 28th Sep")
+- Tab names may not include year (causes 2025/2026 confusion)
+- Row 2 format is consistent: "Monday, 16 February 2026"
+- Row 2 is the single source of truth for dates
+
+**Algorithm**:
+```
+1. Extract cell value from Row 2
+2. Match pattern: "DayName, DD MonthName YYYY"
+3. Parse day number, month name, year
+4. Convert month name to index (0-11)
+5. Create Date object
+6. Return Date or null if parsing fails
+```
+
+**Regex Pattern**: `/(\w+),\s+(\d{1,2})\s+(\w+)\s+(\d{4})/`
+
+#### 5.3 Session Detection and Filtering
+
+**Function**: `parseSheetForDates(sheetName, targetDateStr, type)`
+
+**Multi-Stage Filtering**:
+
+1. **Row Detection** (lines 852-856)
+   ```javascript
+   const firstCell = String(values[r][0] || '').trim().toLowerCase();
+   const isNameTimeRow = /^name\s*\/\s*time/i.test(firstCell);
+   ```
+   - Only process rows where FIRST cell contains "Name/Time"
+   - Prevents duplicate sessions from multiple "Name/Time" occurrences
+
+2. **Strikethrough Detection** (lines 426-480)
+   ```javascript
+   function _isSessionCrossedOut_(sheet, item)
+   ```
+   - Stores row/column coordinates during parsing
+   - Checks getFontLines() on specific cells where session was found
+   - Checks name cell, time cell, and nearby cells
+   - Returns true if ANY have 'line-through' formatting
+   - **Purpose**: Exclude cancelled sessions from totals
+
+3. **Session Deduplication** (lines 401-407)
+   ```javascript
+   const normalizedLabel = String(it.label || '').toLowerCase().trim();
+   const normalizedRoom = String(it.room || '').toLowerCase().trim();
+   const sessionId = normalizedLabel + '|' + normalizedRoom + '|' + startStr + '|' + endStr;
+   ```
+   - Creates unique ID from label + room + time
+   - Normalizes to lowercase to catch "Esther Lussier" vs "esther lussier"
+   - Prevents counting same session multiple times
+
+4. **Date Matching**
+   - Only includes sessions where Row 2 date matches target date
+   - Format: YYYY-MM-DD for comparison
+
+#### 5.4 Studio/Set Aggregation
+
+**Studio Mapping** (lines 19-32):
+```javascript
+const SET_TO_STUDIO = {
+  'iris': 'Studio 2',
+  'club': 'Studio 2',
+  'nova': 'Studio 3',
+  'nest': 'Studio 1',
+  'exec': 'Studio 1',
+  'soho': 'Studio 4'
+};
+```
+
+**Set Categorization** (lines 388-399):
+```javascript
+const knownSets = ['iris', 'club', 'nest', 'exec', 'nova', 'soho'];
+const setName = knownSets.includes(roomName.toLowerCase()) ? roomName : 'Other';
+```
+- Known sets mapped to their names
+- Unknown sets (Event, etc.) → 'Other'
+
+**Aggregation Logic**:
+```
+FOR each valid session:
+  Calculate hours = (endMs - startMs) / 3600000
+
+  For Studio Usage:
+    Map set → studio (via SET_TO_STUDIO)
+    Accumulate hours and count by studio name
+
+  For Set Usage:
+    Use set name directly (or 'Other')
+    Accumulate hours and count by set name
+```
+
+#### 5.5 Upsert Strategy
+
+**Function**: `_writeDailyUsageRow_(sheetName, date, aggregated, labels, type)`
+**Lines**: 265-343
+
+**Purpose**: Insert or update daily usage data without duplicates.
+
+**Algorithm**:
+```
+1. Get or create daily usage sheet
+2. Ensure header row exists with columns for each studio/set
+3. Read all existing data with getDisplayValues()
+4. Search for existing row with matching date (compare as strings)
+5. Build new row data: [Date, Hours1, Count1, Hours2, Count2, ..., Total]
+6. IF row exists:
+     Update existing row values
+   ELSE:
+     Append new row
+7. Write back to sheet
+```
+
+**Why getDisplayValues()?**
+- Dates in sheets might be formatted differently
+- String comparison handles all date formats consistently
+- Avoids date timezone issues
+
+#### 5.6 Automatic Daily Updates
+
+**Function**: `autoUpdateYesterdayData()`
+**Lines**: 264-278
+**Trigger**: Daily at 2am (installed via `installDailyTrigger()`)
+
+**Process**:
+```
+1. Calculate yesterday's date
+2. Format as YYYY-MM-DD
+3. Call backfillDailyStudioUsage(yesterdayStr)
+4. Call backfillDailySetUsage(yesterdayStr)
+5. Log completion
+```
+
+**Why Yesterday?**
+- Today's data is incomplete (day not finished)
+- Yesterday is the last complete day
+- Runs at 2am when all sheets are finalized
+
+#### 5.7 Backfill System
+
+**Functions**:
+- `backfillDailyStudioUsage()` - User-triggered backfill
+- `backfillDailySetUsage()` - User-triggered backfill
+- `_backfillDailyUsage_(type, startDateStr, endDateStr)` - Core logic
+
+**Features**:
+- Prompts user to select month
+- Processes entire month (1st to last day)
+- Skips future dates
+- Updates existing rows if re-run
+- Creates "Studio Usage (Daily)" and "Set Usage (Daily)" sheets
+
+**Performance**:
+- Processes one date at a time
+- Scans all timeline sheets for each date
+- ~30 seconds for full month backfill
+
+#### 5.8 Monthly Summary System
+
+**Functions**:
+- `showMonthlyStudioSummary()` - All studios
+- `showMonthlySetSummary()` - All sets
+- `showMonthlyStudioSummaryExclOther()` - Exclude "Other"
+- `showMonthlySetSummaryExclOther()` - Exclude "Other"
+
+**Data Source**: Reads from Daily Usage sheets (NOT re-parsing timelines)
+
+**Performance Benefit**: ~30x faster than re-parsing
+
+**Function**: `_buildMonthlySummaryHtml_(type, excludeOther)`
+**Lines**: 487-760
+
+**Process**:
+```
+1. Calculate last complete month
+   now.getMonth() - 1 = previous month
+2. Read from Daily Usage sheet
+3. Filter rows by month
+4. Aggregate hours and counts by studio/set
+5. Calculate totals (with/without "Other")
+6. Count working days in month
+7. Calculate percentages
+8. Generate styled HTML with:
+   - Summary cards (total hours, avg/day, sessions)
+   - Table with usage bars
+   - Gradient styling and colors
+9. Display in modal dialog (1100x750)
+```
+
+**Exclusion Mode** (`excludeOther=true`):
+- Filters out "Other" category from table
+- Calculates percentages based only on known studios/sets
+- Shows "(Excl. Other)" in title
+- Excludes "Other" sessions from total count
+
+**Working Days Calculation**:
+```javascript
+function _countWorkingDays_(startDate, endDate)
+  FOR each day in range:
+    IF dayOfWeek is Monday-Friday:
+      count++
+  RETURN count
+```
+
+#### 5.9 Email Reporting System
+
+**Functions**:
+- `sendMonthlySummaryEmail()` - Main email function
+- `sendTestMonthlySummaryEmail()` - Test email
+- `installMonthlyEmailTrigger()` - Install trigger for 2nd of month at 6am
+
+**Email Structure**:
+```html
+<html>
+  <head>
+    <style>
+      /* All CSS from monthly summary popups */
+      /* Gradient backgrounds, cards, tables, bars */
+    </style>
+  </head>
+  <body>
+    <h1>Monthly Usage Summary - January 2026</h1>
+
+    <!-- Summary 1: Studio Usage (with Other) -->
+    <div class="wrap">...</div>
+    <hr>
+
+    <!-- Summary 2: Studio Usage (Excl. Other) -->
+    <div class="wrap">...</div>
+    <hr>
+
+    <!-- Summary 3: Set Usage (with Other) -->
+    <div class="wrap">...</div>
+    <hr>
+
+    <!-- Summary 4: Set Usage (Excl. Other) -->
+    <div class="wrap">...</div>
+  </body>
+</html>
+```
+
+**CSS Extraction** (`_extractCss_()`):
+- Extracts `<style>` tags from first summary
+- All 4 summaries share same CSS
+- Preserves gradients, shadows, colors, bars
+
+**Content Extraction** (`_extractBodyContent_()`):
+- Extracts `.wrap` div content
+- Removes Close button
+- Preserves all styling and structure
+
+**Recipient**: ben@poddster.com
+
+**Trigger**: 2nd of each month at 6am
 
 ## Design Patterns
 
