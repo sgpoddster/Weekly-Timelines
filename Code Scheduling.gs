@@ -32,7 +32,7 @@ function onOpen(e) {
   var ui = SpreadsheetApp.getUi();
 
   // --- Assign Operators / Editor Assigner menu ---
-  var assignMenu = ui.createMenu('Assign Operators');
+  var assignMenu = ui.createMenu('🎨 Assign Operators');
   assignMenu
     .addItem('Assign Editors to TBC on Active Sheet', 'assignEditorsOnActiveSheet')
     .addItem('Undo (replace names back to TBC on Active Sheet)', 'undoAssignedOnActiveSheet')
@@ -58,7 +58,7 @@ function onOpen(e) {
     .addToUi();
 
   // --- Timelines menu ---
-  ui.createMenu('Timelines')
+  ui.createMenu('🕐 Timelines')
     .addItem('Show me the room timelines!', 'openTimeline')
     .addItem('Show me the operator timelines!', 'openOperatorTimeline')
     .addToUi();
