@@ -447,7 +447,7 @@ function _getStatsForSpecificDate_(targetDate) {
 
 /**
  * Check if a session is crossed out (has strikethrough formatting)
- * Improved to handle case-insensitive matching and merged cells
+ * Only checks cells that exactly match the label to avoid false positives
  */
 function _isSessionCrossedOut_(sheet, item) {
   try {
@@ -458,13 +458,13 @@ function _isSessionCrossedOut_(sheet, item) {
     const searchLabel = String(item.label || '').trim().toLowerCase();
     if (!searchLabel) return false;
 
-    // Search for cells containing this label (case-insensitive, partial match)
+    // Search for cells that EXACTLY match this label (case-insensitive)
     for (let r = 0; r < values.length; r++) {
       for (let c = 0; c < values[r].length; c++) {
         const cellValue = String(values[r][c] || '').trim().toLowerCase();
 
-        // Check if cell contains the label (partial match for merged cells)
-        if (cellValue.includes(searchLabel) || searchLabel.includes(cellValue)) {
+        // EXACT match only (not partial) to avoid false positives
+        if (cellValue === searchLabel) {
           // Check strikethrough formatting
           if (formats[r][c] === 'line-through') {
             Logger.log('  → Session "' + item.label + '" is struck through - SKIPPING');
