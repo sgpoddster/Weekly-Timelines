@@ -1306,7 +1306,7 @@ function showStudioSetUsageMonthlyAllTabs() {
     if (prev) ss.setActiveSheet(prev);
   }
   if (!allItems.length) {
-    SpreadsheetApp.getUi().alert('Couldn't find any timeline items in the workbook.');
+    SpreadsheetApp.getUi().alert("Couldn't find any timeline items in the workbook.");
     return;
   }
   var agg = aggregateStudioSetByMonth_(allItems);
