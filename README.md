@@ -28,6 +28,7 @@ This project provides an integrated system for tracking podcast recording sessio
 - **Backfill capability** - Populate historical data for any month
 - **Monthly summaries** - Beautiful popup summaries with charts and usage bars
 - **Monthly summary emails** - Automatic email reports on the 2nd of each month
+- **Dashboard with charts** - Visual trends showing studio/set usage over 6 months with consistent colors
 - Detailed session breakdowns with strikethrough detection for cancelled sessions
 - Usage statistics across multiple sheets
 - Exclusion mode to view summaries without "Other/Event" category
@@ -161,6 +162,16 @@ The script automatically detects day headers in these formats:
    - Sends automatic email on 2nd of each month at 6am to ben@poddster.com
    - Contains all 4 monthly summaries (Studio/Set with and without "Other")
    - Test it: `🎨 Assign Operators > 📧 Send Test Monthly Summary Email`
+
+5. **Dashboard with Charts**
+   - Update dashboard: `🎨 Assign Operators > 📈 Update Dashboard`
+   - Install trigger: `🎨 Assign Operators > ⚙️ Install Dashboard Update (1st of month, 6am)`
+   - Creates "Dashboard" sheet with 3 charts:
+     - **Studio Usage Trends** - Grouped bar chart showing % usage over last 6 months
+     - **Set Usage Trends** - Grouped bar chart showing % usage over last 6 months
+     - **Current Month Studio Comparison** - Bar chart comparing hours for last complete month
+   - Each studio/set has consistent color across all charts for easy tracking
+   - Automatically updates on 1st of each month
 
 ## Configuration
 

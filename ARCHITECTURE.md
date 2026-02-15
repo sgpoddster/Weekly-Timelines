@@ -65,12 +65,20 @@ The Weekly Timelines system is a Google Apps Script application that integrates 
 │  │ • Set Usage (Daily) - One row per date                          │   │
 │  │ Format: Date | Studio1 Hours | Studio1 Count | ... | Total      │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ Dashboard Sheet (Auto-updated monthly)                          │   │
+│  │ • Studio Usage Trends - 6 month % chart with consistent colors  │   │
+│  │ • Set Usage Trends - 6 month % chart with consistent colors     │   │
+│  │ • Current Month Comparison - Hours bar chart                    │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Time-Based Triggers                                  │
 │  • Daily 2am: autoUpdateYesterdayData() - Update previous day           │
+│  • Monthly 1st at 6am: updateDashboard() - Rebuild charts               │
 │  • Monthly 2nd at 6am: sendMonthlySummaryEmail() - Send report          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -702,6 +710,120 @@ function _countWorkingDays_(startDate, endDate)
 **Recipient**: ben@poddster.com
 
 **Trigger**: 2nd of each month at 6am
+
+#### 5.10 Dashboard and Charts System
+
+**File**: `Code Timelines - Daily Usage.gs`
+
+The dashboard system provides visual analytics with charts showing usage trends over time.
+
+**Purpose**: Create visual representations of studio/set usage trends for easy analysis and comparison.
+
+**Functions**:
+- `updateDashboard()` - Main function to rebuild dashboard
+- `installDashboardTrigger()` - Install trigger for 1st of month at 6am
+
+**Chart Types**:
+
+1. **Studio Usage Trends** (Grouped Column Chart)
+   - Shows percentage of total hours for each studio
+   - Last 6 complete months
+   - Grouped bars allow month-to-month comparison
+   - Consistent colors: Studio 1 (Green), Studio 2 (Blue), Studio 3 (Yellow), Studio 4 (Red)
+
+2. **Set Usage Trends** (Grouped Column Chart)
+   - Shows percentage of total hours for each set
+   - Last 6 complete months
+   - Grouped bars for easy trend spotting
+   - Consistent colors: Iris (Purple), Club (Cyan), Nest (Green), Exec (Orange), Nova (Red), Soho (Indigo)
+
+3. **Current Month Studio Comparison** (Column Chart)
+   - Total hours comparison across studios
+   - Last complete month only
+   - Quick snapshot of current studio utilization
+
+**Data Aggregation Process**:
+```
+1. Determine last 6 complete months (current month - 1 to current month - 6)
+2. Read Studio Usage (Daily) and Set Usage (Daily) sheets
+3. Parse header to find hour columns (exclude count and total columns)
+4. FOR each date row:
+     Extract date, determine month
+     Accumulate hours by studio/set for that month
+5. Calculate percentages per month:
+     FOR each month:
+       total = sum of all studio/set hours
+       FOR each studio/set:
+         percentage = (hours / total) * 100
+6. Write aggregated data to Dashboard sheet
+7. Create charts using Google Charts API
+```
+
+**Chart Creation** (`_createStudioTrendsChart_`, `_createSetTrendsChart_`):
+```javascript
+// Write data range to sheet
+sheet.getRange(row, col, rows, cols).setValues(data);
+
+// Create chart
+const chart = sheet.newChart()
+  .setChartType(Charts.ChartType.COLUMN)
+  .addRange(dataRange)
+  .setPosition(row, col, offsetX, offsetY)
+  .setOption('title', 'Studio Usage Trends (% of Total Hours)')
+  .setOption('isStacked', false)
+  .setOption('colors', colorArray)
+  .build();
+
+sheet.insertChart(chart);
+```
+
+**Color Consistency**:
+
+Studio Colors (defined in `_getStudioColors_()`):
+```javascript
+{
+  'Studio 1': '#34a853',  // Green
+  'Studio 2': '#4285f4',  // Blue
+  'Studio 3': '#fbbc04',  // Yellow
+  'Studio 4': '#ea4335',  // Red
+  'Other': '#9e9e9e'      // Gray
+}
+```
+
+Set Colors (defined in `_getSetColors_()`):
+```javascript
+{
+  'Iris': '#9c27b0',     // Purple
+  'Club': '#00bcd4',     // Cyan
+  'Nest': '#4caf50',     // Green
+  'Exec': '#ff9800',     // Orange
+  'Nova': '#f44336',     // Red
+  'Soho': '#3f51b5',     // Indigo
+  'Other': '#9e9e9e'     // Gray
+}
+```
+
+**Why Consistent Colors?**
+- Same studio/set always appears in same color across all charts
+- Easy to track trends visually across multiple months
+- Reduces cognitive load when comparing data
+- Professional, polished appearance
+
+**Dashboard Layout**:
+```
+Row 1-2: Title and last updated timestamp
+Row 4-14: Studio trends chart data and chart
+Row 20-30: Set trends chart data and chart
+Row 36-46: Current month comparison data and chart
+```
+
+**Performance**:
+- Reads from Daily Usage sheets (pre-aggregated data)
+- No timeline re-parsing required
+- Generates dashboard in <5 seconds
+- Charts update automatically on 1st of month
+
+**Trigger**: 1st of each month at 6am
 
 ## Design Patterns
 

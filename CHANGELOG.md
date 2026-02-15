@@ -4,6 +4,55 @@
 
 ### Latest Updates
 
+#### 22. **Add Dashboard with Usage Trend Charts** (Commit: fc881ee)
+- **New Feature:** Dashboard sheet with visual charts for tracking studio/set usage trends
+- **Charts Created:**
+  1. **Studio Usage Trends** - Grouped bar chart showing % usage over last 6 months
+  2. **Set Usage Trends** - Grouped bar chart showing % usage over last 6 months
+  3. **Current Month Studio Comparison** - Bar chart comparing hours for last complete month
+- **Key Features:**
+  - Consistent colors for each studio/set across all charts for easy tracking
+  - Studio colors: Studio 1 (Green), Studio 2 (Blue), Studio 3 (Yellow), Studio 4 (Red)
+  - Set colors: Iris (Purple), Club (Cyan), Nest (Green), Exec (Orange), Nova (Red), Soho (Indigo)
+  - Reads from Daily Usage sheets for fast performance
+  - Shows last 6 complete months of data
+  - Percentage-based trends for easy comparison across months
+  - Automatic update trigger for 1st of month at 6am
+- **New Functions:**
+  - `updateDashboard()` - Main function to rebuild dashboard with all 3 charts
+  - `_getMonthlyAggregatedData_()` - Aggregates 6 months of data from Daily sheets
+  - `_aggregateByMonth_()` - Calculates monthly totals and percentages
+  - `_createStudioTrendsChart_()` - Creates grouped bar chart for studio trends
+  - `_createSetTrendsChart_()` - Creates grouped bar chart for set trends
+  - `_createCurrentMonthComparisonChart_()` - Creates comparison bar chart
+  - `_getStudioColors_()` - Returns consistent color array for studios
+  - `_getSetColors_()` - Returns consistent color array for sets
+  - `installDashboardTrigger()` - Sets up monthly auto-update on 1st at 6am
+- **Menu Items:**
+  - 📈 Update Dashboard - Run immediately to create/update dashboard
+  - ⚙️ Install Dashboard Update (1st of month, 6am) - Auto-update trigger
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 340-640; `Code Scheduling.gs` lines 57-63
+
+#### 21. **Replace CSS Grid with Flexbox for Email Compatibility** (Commit: 56cd676)
+- **Problem:** Summary cards in email were stacking vertically instead of horizontally
+- **Root Cause:** CSS Grid not supported in most email clients (Gmail, Outlook, etc.)
+- **Solution:** Replaced `display: grid` with `display: flex` for `.summary-cards`
+- **Changes:**
+  - Added vendor prefixes for maximum compatibility (-webkit-box, -ms-flexbox)
+  - Added `flex: 1 1 200px` to `.card` for equal sizing with 200px minimum
+  - Added `min-width: 200px` to prevent cards from getting too narrow
+- **Impact:** 4 summary cards now display in horizontal row in email clients
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 699-722
+
+#### 20. **Fix Email Layout to Match Popup Exactly** (Commit: 0587486)
+- **Problem:** Email missing card layout with shadows and proper spacing
+- **Solution:** Modified `_extractBodyContent_()` to extract complete `.wrap` div including the div tag itself
+- **Impact:** Email displays with proper card layout identical to popup:
+  - 4 summary cards in horizontal row
+  - Cards with white background, shadows, and rounded corners
+  - Proper padding and margins matching popup
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 304-317
+
 #### 19. **Fix Email Formatting to Match Popup Styling** (Commit: 6b123bb)
 - **Problem:** Monthly summary emails were displaying as plain text without styling
 - **Solution:** Extract and include CSS from summary popups in email HTML
