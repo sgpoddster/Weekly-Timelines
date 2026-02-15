@@ -349,35 +349,13 @@ function _getStatsForSpecificDate_(targetDate) {
     if (sheetName.indexOf('Photo') >= 0) return;
     if (sheetName.indexOf('Integrity') >= 0) return;
 
-    // Skip archived tabs from 2025 or earlier (old date format causes parsing issues)
-    // Pattern matches: 2015-2025 (4-digit) or '15-'25 (2-digit abbreviations)
-    if (/\b20(1[0-9]|2[0-5])\b|\b'(0[0-9]|1[0-9]|2[0-5])\b/.test(sheetName)) {
-      return;  // Skip silently - these are archived tabs
-    }
+    // STRICT FILTER: Only process tabs from 2026 onwards
+    // Skip any tab that doesn't have "2026" or "'26" in the name
+    const has2026 = /\b2026\b|\b'26\b/i.test(sheetName);
 
-    // Skip tabs with month names but no year ONLY if month is 3+ months in the past
-    // Example: "22nd - 28th Sep" in February 2026 → skip (Sep was 5 months ago)
-    // Example: "16th - 22nd Feb" in February 2026 → keep (current month)
-    const hasYear = /\b20\d{2}\b|\b'\d{2}\b/.test(sheetName);
-    const monthMatch = sheetName.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i);
-
-    if (monthMatch && !hasYear) {
-      const monthName = monthMatch[1].toLowerCase();
-      const monthIndex = {
-        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
-      }[monthName];
-
-      const now = new Date();
-      const currentMonth = now.getMonth();
-
-      // Calculate how many months in the past this is
-      let monthsAgo = currentMonth - monthIndex;
-      if (monthsAgo < 0) monthsAgo += 12; // Handle year wrap (e.g., Feb seeing Dec)
-
-      if (monthsAgo >= 3) {
-        return;  // Skip - tab is from 3+ months ago, likely archived
-      }
+    if (!has2026) {
+      // If no explicit 2026 marker, skip this tab (it's from 2025 or earlier)
+      return;
     }
 
     try {
