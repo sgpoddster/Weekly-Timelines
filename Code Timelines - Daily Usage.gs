@@ -299,13 +299,14 @@ function _extractCss_(html) {
 
 /**
  * Helper function to extract body content from HTML popup
- * Keeps the content inside the .wrap div
+ * Extracts the complete .wrap div (including the div itself) without the Close button
  */
 function _extractBodyContent_(html) {
-  // Extract the .wrap div content (everything inside <div class="wrap">...</div>)
-  const wrapMatch = html.match(/<div class="wrap">([\s\S]*?)<div class="actions">/i);
+  // Extract the complete .wrap div up to (but not including) the actions div
+  const wrapMatch = html.match(/(<div class="wrap">[\s\S]*?)<div class="actions">/i);
   if (wrapMatch && wrapMatch[1]) {
-    return wrapMatch[1];
+    // Return the .wrap div with closing tag
+    return wrapMatch[1] + '</div>';
   }
   // Fallback: extract everything inside <body>...</body>
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
