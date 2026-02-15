@@ -2,6 +2,28 @@
 
 ## 2026-02-15 - Critical Fixes for Daily Usage Tracking
 
+### Latest Updates
+
+#### 16. **Add Monthly Summary Exclusion Mode and Menu Cleanup** (Commit: 8acad69)
+- **Changes:**
+  - Removed "Write Daily Studio Usage (Yesterday)" and "Write Daily Set Usage (Yesterday)" menu items and functions (replaced by `autoUpdateYesterdayData` which runs at 2am daily)
+  - Updated backfill menu text to remove "(Year to Date)" suffix (it prompts for month selection, not year)
+  - Added 2 new monthly summary functions that exclude "Other" category from calculations
+- **New Functions:**
+  - `showMonthlyStudioSummaryExclOther()` - Studio summary excluding Event/Other hours
+  - `showMonthlySetSummaryExclOther()` - Set summary excluding Event/Other hours
+- **Enhanced:** `_buildMonthlySummaryHtml_(type, excludeOther)` now supports exclusion mode:
+  - Filters out "Other" category from table display when `excludeOther=true`
+  - Calculates percentages based only on known studios/sets (not including Other)
+  - Updates popup title and labels to show "(Excl. Other)" when appropriate
+  - Uses `totalHoursExclOther` for average hours/day calculation
+- **Menu Structure:**
+  - 📊 Monthly Studio Summary (includes all categories)
+  - 📊 Monthly Set Summary (includes all categories)
+  - 📊 Monthly Studio Summary (Excl. Other) (only known studios)
+  - 📊 Monthly Set Summary (Excl. Other) (only known sets)
+- **Files Modified:** `Code Timelines - Daily Usage.gs` lines 195-228, 487-750; `Code Scheduling.gs` lines 47-58
+
 ### Major Changes
 
 #### 1. **CRITICAL: Parse Dates from Row 2 Only** (Commit: 5c0f615)
