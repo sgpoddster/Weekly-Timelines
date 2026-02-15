@@ -8,7 +8,8 @@
  * ================================================== */
 
 // DAY_NAMES constant - required for day detection
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+// Note: DAY_NAMES is already defined in code.gs, so we don't redefine it here
+// const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Canonical orders for stable columns
 const STUDIO_ORDER_DAILY = ['Studio 1', 'Studio 2', 'Studio 3', 'Studio 4', 'Other'];
