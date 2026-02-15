@@ -513,26 +513,56 @@ function _buildMonthlySummaryHtml_(type) {
 
   const monthName = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+  // READ FROM DAILY USAGE SHEETS (much faster than re-parsing timeline sheets!)
+  const sheetName = (type === 'studio') ? 'Studio Usage (Daily)' : 'Set Usage (Daily)';
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(sheetName);
+
+  if (!sheet) {
+    throw new Error('Sheet "' + sheetName + '" not found. Please run backfill first.');
+  }
+
+  const data = sheet.getDataRange().getDisplayValues();
+  if (data.length < 2) {
+    throw new Error('No data found in "' + sheetName + '". Please run backfill first.');
+  }
+
+  // Parse header to find column positions
+  const header = data[0];
+  const colMap = {};
+  for (let c = 0; c < header.length; c++) {
+    colMap[header[c]] = c;
+  }
+
   // Aggregate data for the month
   let totalHours = 0;
   const byCategory = {}; // studio or set
+  const labels = (type === 'studio') ? STUDIO_ORDER_DAILY : SET_ORDER_DAILY;
 
-  const current = new Date(monthStart);
-  while (current <= monthEnd) {
-    const stats = _getStatsForSpecificDate_(new Date(current));
+  // Process each row
+  for (let r = 1; r < data.length; r++) {
+    const dateStr = data[r][0]; // First column is date (YYYY-MM-DD)
+    if (!dateStr) continue;
 
-    if (stats) {
-      totalHours += stats.totalHours;
-      const source = (type === 'studio') ? stats.byStudio : stats.bySet;
+    // Check if date is within the target month
+    const rowDate = new Date(dateStr);
+    if (rowDate >= monthStart && rowDate <= monthEnd) {
+      // Sum up hours and counts for each category
+      labels.forEach(label => {
+        const hoursCol = colMap[label + ' (h)'];
+        const countCol = colMap[label + ' (#)'];
 
-      Object.keys(source).forEach(name => {
-        if (!byCategory[name]) byCategory[name] = { hours: 0, count: 0 };
-        byCategory[name].hours += source[name].hours;
-        byCategory[name].count += source[name].count;
+        if (hoursCol !== undefined && countCol !== undefined) {
+          const hours = parseFloat(data[r][hoursCol]) || 0;
+          const count = parseInt(data[r][countCol]) || 0;
+
+          if (!byCategory[label]) byCategory[label] = { hours: 0, count: 0 };
+          byCategory[label].hours += hours;
+          byCategory[label].count += count;
+          totalHours += hours;
+        }
       });
     }
-
-    current.setDate(current.getDate() + 1);
   }
 
   // Calculate working days in month
