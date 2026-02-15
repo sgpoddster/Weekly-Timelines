@@ -349,13 +349,35 @@ function _getStatsForSpecificDate_(targetDate) {
     if (sheetName.indexOf('Photo') >= 0) return;
     if (sheetName.indexOf('Integrity') >= 0) return;
 
-    // STRICT FILTER: Only process tabs from 2026 onwards
-    // Skip any tab that doesn't have "2026" or "'26" in the name
-    const has2026 = /\b2026\b|\b'26\b/i.test(sheetName);
+    // Skip tabs with explicit 2025 or earlier years
+    if (/\b20(1[0-9]|2[0-5])\b|\b'(0[0-9]|1[0-9]|2[0-5])\b/.test(sheetName)) {
+      return;  // Has 2025, 2024, etc. - definitely old
+    }
 
+    // For tabs without explicit years, use smart filtering
+    // If it has "2026" or "'26", definitely keep it
+    const has2026 = /\b2026\b|\b'26\b/i.test(sheetName);
     if (!has2026) {
-      // If no explicit 2026 marker, skip this tab (it's from 2025 or earlier)
-      return;
+      // No year marker - check if month is far from current (likely old tab)
+      const monthMatch = sheetName.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)/i);
+
+      if (monthMatch) {
+        const monthName = monthMatch[1].toLowerCase().substring(0, 3);
+        const monthMap = {jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11};
+        const tabMonth = monthMap[monthName];
+        const now = new Date();
+        const currentMonth = now.getMonth();
+
+        // Calculate month difference (handles year wrap)
+        let monthDiff = tabMonth - currentMonth;
+        if (monthDiff < -6) monthDiff += 12;  // e.g., Feb(1) - Dec(11) = -10, add 12 = 2 months ago
+        if (monthDiff > 6) monthDiff -= 12;   // e.g., Dec(11) - Feb(1) = 10, sub 12 = -2 months future
+
+        // Skip tabs that are 7+ months away (likely from previous year)
+        if (Math.abs(monthDiff) > 6) {
+          return;
+        }
+      }
     }
 
     try {
