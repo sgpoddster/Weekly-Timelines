@@ -355,12 +355,29 @@ function _getStatsForSpecificDate_(targetDate) {
       return;  // Skip silently - these are archived tabs
     }
 
-    // Also skip tabs that have month names but no year indicator
-    // Example: "22nd - 28th Sep" without a year (likely old archived tabs)
+    // Skip tabs with month names but no year ONLY if month is 3+ months in the past
+    // Example: "22nd - 28th Sep" in February 2026 → skip (Sep was 5 months ago)
+    // Example: "16th - 22nd Feb" in February 2026 → keep (current month)
     const hasYear = /\b20\d{2}\b|\b'\d{2}\b/.test(sheetName);
-    const hasMonth = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(sheetName);
-    if (hasMonth && !hasYear) {
-      return;  // Skip - old tab without year indicator
+    const monthMatch = sheetName.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i);
+
+    if (monthMatch && !hasYear) {
+      const monthName = monthMatch[1].toLowerCase();
+      const monthIndex = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+      }[monthName];
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+
+      // Calculate how many months in the past this is
+      let monthsAgo = currentMonth - monthIndex;
+      if (monthsAgo < 0) monthsAgo += 12; // Handle year wrap (e.g., Feb seeing Dec)
+
+      if (monthsAgo >= 3) {
+        return;  // Skip - tab is from 3+ months ago, likely archived
+      }
     }
 
     try {
