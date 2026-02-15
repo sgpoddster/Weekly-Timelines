@@ -447,25 +447,41 @@ function _getStatsForSpecificDate_(targetDate) {
 
 /**
  * Check if a session is crossed out (has strikethrough formatting)
- * Only checks cells that exactly match the label to avoid false positives
+ * Checks the specific row where the session was parsed (name + time row)
  */
 function _isSessionCrossedOut_(sheet, item) {
   try {
+    // If we have row/column info from parsing, check that specific row
+    if (item.rowIndex != null && item.colIndex != null) {
+      const formats = sheet.getDataRange().getFontLines();
+      const r = item.rowIndex;
+
+      // Check strikethrough on cells in the same row near the time
+      // Check the name cell (2 cells left of time) and the time cell itself
+      const checkCols = [item.colIndex - 2, item.colIndex - 1, item.colIndex];
+
+      for (let i = 0; i < checkCols.length; i++) {
+        const c = checkCols[i];
+        if (c >= 0 && c < formats[r].length) {
+          if (formats[r][c] === 'line-through') {
+            Logger.log('  → Session "' + item.label + '" is struck through (row ' + (r+1) + ', col ' + (c+1) + ') - SKIPPING');
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // Fallback: search entire sheet (old behavior)
     const values = sheet.getDataRange().getDisplayValues();
     const formats = sheet.getDataRange().getFontLines();
-
-    // Normalize the search label
     const searchLabel = String(item.label || '').trim().toLowerCase();
     if (!searchLabel) return false;
 
-    // Search for cells that EXACTLY match this label (case-insensitive)
     for (let r = 0; r < values.length; r++) {
       for (let c = 0; c < values[r].length; c++) {
         const cellValue = String(values[r][c] || '').trim().toLowerCase();
-
-        // EXACT match only (not partial) to avoid false positives
         if (cellValue === searchLabel) {
-          // Check strikethrough formatting
           if (formats[r][c] === 'line-through') {
             Logger.log('  → Session "' + item.label + '" is struck through - SKIPPING');
             return true;
@@ -909,7 +925,9 @@ function _getTimelinePayloadForSheet_(sheet) {
           start,
           end,
           startMs: start.getTime(),
-          endMs: end.getTime()
+          endMs: end.getTime(),
+          rowIndex: r,  // Store row index for strikethrough checking
+          colIndex: seg.startCol + t  // Store column index where time was found
         });
       }
     }
