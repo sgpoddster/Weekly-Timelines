@@ -70,6 +70,9 @@ function onOpen(e) {
     .addToUi();
 
   // --- Session Data Integrity Checker menu ---
+  // NOTE: These functions are in "Uploaded Data Integrity.gs" which is not in local files
+  // Uncomment if you have that file in Google Apps Script
+  /*
   ui.createMenu('🎬 Poddster Session Data Integrity Checker')
     .addItem("Check Today's Data", 'runSanityToday')
     .addItem("Check Yesterday's Data", 'runSanityYesterday')
@@ -77,11 +80,11 @@ function onOpen(e) {
     .addSeparator()
     .addItem('Send Test Email', 'sendSanityTestEmail')
     .addToUi();
+  */
 
   // --- Photo JPG Helper menu ---
-  // Call the menu builder from the Photo ARW Parser script
-  // NOTE: Temporarily commented out - function not found in local files
-  // If you have a Photo Helpers.gs file in Google Apps Script, uncomment this line
+  // NOTE: This function is in "Photo Helpers.gs" which is not in local files
+  // Uncomment if you have that file in Google Apps Script
   // createPhotoJpgMenu();
 }
 
