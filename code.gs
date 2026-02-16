@@ -540,22 +540,8 @@ function getOperatorTimelinePayloadSafe() {
 * DAILY STUDIO & SET USAGE TRACKING
 * ================================================== */
 
-// Canonical orders for stable columns
-const STUDIO_ORDER = ['Studio 1', 'Studio 2', 'Studio 3', 'Studio 4', 'Other'];
-const SET_ORDER = ['Iris', 'Club', 'Nest', 'Exec', 'Nova', 'Soho', 'Other'];
-
-// Set → Studio mapping (case-insensitive)
-const SET_TO_STUDIO = {
-  'iris': 'Studio 2',
-  'club': 'Studio 2',
-  'nova': 'Studio 3',
-  'nest': 'Studio 1',
-  'exec': 'Studio 1',
-  'soho': 'Studio 4'
-};
-
-const UNKNOWN_STUDIO = 'Other';
-
+// NOTE: Constants STUDIO_ORDER, SET_ORDER, SET_TO_STUDIO, and UNKNOWN_STUDIO
+// are defined in "Code Scheduling.gs" to avoid duplicate declarations
 
 /**
  * Write daily studio usage for the active sheet
