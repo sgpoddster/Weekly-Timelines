@@ -13,6 +13,8 @@ function createPhotoJpgMenu() {
     .addItem('🔄 Convert ARW to JPG (Active Cell Link)', 'convertArwFromActiveCell')
     .addItem('📄 Create HTML from existing JPGs (Link/ID)', 'createHtmlFromExistingJpegs')
     .addSeparator()
+    .addItem('⚙️ Install Hourly Auto-Converter', 'installPhotoAutoConverterTrigger')
+    .addSeparator()
     .addItem('📧 Send TEST Email (Active Row)', 'sendTestEmailActiveRow')
     .addItem('📅 Test Calendar Sync', 'testCalendarSync')
     .addItem('❓ Debug Spreadsheet Layout', 'debugSpreadsheetLayout')
@@ -676,4 +678,160 @@ function sendTestEmailActiveRow() {
     SpreadsheetApp.getUi().alert('Error: ' + e.message);
     Logger.log(e);
   }
+}
+
+
+/**
+ * Scheduled automatic ARW to JPG converter
+ * Runs hourly to process all PHOTO sessions on all active weekly sheets
+ * Designed to run via time-based trigger without user interaction
+ */
+function scheduledAutoConverter() {
+  SCRIPT_START_TIME = new Date().getTime();
+
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheets = ss.getSheets();
+
+    var totalStats = {
+      found: 0,
+      created: 0,
+      converted: 0,
+      skipped: 0,
+      timeOut: false,
+      foldersScanned: [],
+      sheetsProcessed: 0
+    };
+
+    Logger.log('=== Scheduled Photo Auto-Converter Starting ===');
+    Logger.log('Time: ' + new Date());
+
+    // Process each sheet in the workbook
+    for (var s = 0; s < sheets.length; s++) {
+      if (isTimeUp()) {
+        totalStats.timeOut = true;
+        Logger.log('⏱ Time limit reached, stopping');
+        break;
+      }
+
+      var sheet = sheets[s];
+      var sheetName = sheet.getName();
+
+      // Skip utility sheets
+      if (sheetName.match(/^(Dashboard|Studio Usage|Set Usage|Working Hours|Photo Errors)/i)) {
+        continue;
+      }
+
+      Logger.log('Processing sheet: ' + sheetName);
+      totalStats.sheetsProcessed++;
+
+      var lastRow = sheet.getLastRow();
+      var lastCol = sheet.getLastColumn();
+
+      if (lastRow < 1 || lastCol < 1) continue;
+
+      var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+      var richText = sheet.getRange(1, 1, lastRow, lastCol).getRichTextValues();
+
+      // Scan for PHOTO sessions
+      outerLoop:
+      for (var r = 0; r < lastRow; r++) {
+        for (var c = 0; c < lastCol; c++) {
+          if (isTimeUp()) {
+            totalStats.timeOut = true;
+            break outerLoop;
+          }
+
+          var cellValue = values[r][c];
+          if (!cellValue) continue;
+          var text = String(cellValue).trim().toUpperCase();
+
+          if (text.indexOf('PHOTO') === -1) continue;
+
+          totalStats.found++;
+
+          var rootInfo = findRootLinkNearCell_(richText, r, c, lastRow, lastCol);
+          if (!rootInfo || !rootInfo.url) {
+            totalStats.skipped++;
+            continue;
+          }
+
+          var folderId = extractDriveIdFromUrl_(rootInfo.url);
+          if (!folderId) {
+            totalStats.skipped++;
+            continue;
+          }
+
+          try {
+            var initialFolder = DriveApp.getFolderById(folderId);
+            var rootFolder = navigateUpToSessionRoot_(initialFolder);
+
+            // Skip if already processed this folder
+            if (totalStats.foldersScanned.indexOf(rootFolder.getId()) !== -1) {
+              continue;
+            }
+            totalStats.foldersScanned.push(rootFolder.getId());
+
+            Logger.log('📂 Processing: ' + rootFolder.getName() + ' (Sheet: ' + sheetName + ')');
+
+            processFolderRecursively_(rootFolder, totalStats);
+
+            if (totalStats.timeOut) break outerLoop;
+
+          } catch (e) {
+            totalStats.skipped++;
+            Logger.log('❌ Error on sheet "' + sheetName + '" row ' + (r + 1) + ': ' + e);
+            logErrorToSheet_(sheetName + ' Row ' + (r+1), 'Scheduled', e.toString());
+          }
+        }
+      }
+
+      if (totalStats.timeOut) break;
+    }
+
+    // Log summary
+    Logger.log('=== Scheduled Converter Complete ===');
+    Logger.log('Sheets processed: ' + totalStats.sheetsProcessed);
+    Logger.log('PHOTO sessions found: ' + totalStats.found);
+    Logger.log('Unique folders scanned: ' + totalStats.foldersScanned.length);
+    Logger.log('JPG folders created: ' + totalStats.created);
+    Logger.log('New conversions triggered: ' + totalStats.converted);
+    Logger.log('Skipped (no link): ' + totalStats.skipped);
+    if (totalStats.timeOut) {
+      Logger.log('⚠️ Timed out - will resume next run');
+    }
+
+  } catch (e) {
+    Logger.log('❌ Fatal error in scheduledAutoConverter: ' + e);
+    logErrorToSheet_('Scheduled Run', 'Fatal', e.toString());
+  }
+}
+
+
+/**
+ * Install hourly trigger for automatic ARW conversion
+ * Run this once from the menu to set up automatic processing
+ */
+function installPhotoAutoConverterTrigger() {
+  // Delete any existing triggers for this function
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'scheduledAutoConverter') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  // Create new hourly trigger
+  ScriptApp.newTrigger('scheduledAutoConverter')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  SpreadsheetApp.getUi().alert(
+    '✅ Photo Auto-Converter Installed\n\n' +
+    'ARW to JPG conversion will now run automatically every hour.\n\n' +
+    'The converter scans all sheets for PHOTO sessions and processes any new ARW files.'
+  );
+
+  Logger.log('Photo auto-converter trigger installed - runs every hour');
 }
