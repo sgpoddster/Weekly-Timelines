@@ -70,9 +70,6 @@ function onOpen(e) {
     .addToUi();
 
   // --- Session Data Integrity Checker menu ---
-  // NOTE: These functions are in "Uploaded Data Integrity.gs" which is not in local files
-  // Uncomment if you have that file in Google Apps Script
-  /*
   ui.createMenu('🎬 Poddster Session Data Integrity Checker')
     .addItem("Check Today's Data", 'runSanityToday')
     .addItem("Check Yesterday's Data", 'runSanityYesterday')
@@ -80,12 +77,9 @@ function onOpen(e) {
     .addSeparator()
     .addItem('Send Test Email', 'sendSanityTestEmail')
     .addToUi();
-  */
 
   // --- Photo JPG Helper menu ---
-  // NOTE: This function is in "Photo Helpers.gs" which is not in local files
-  // Uncomment if you have that file in Google Apps Script
-  // createPhotoJpgMenu();
+  createPhotoJpgMenu();
 }
 
 const CFG = {
