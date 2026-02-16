@@ -79,9 +79,10 @@ function onOpen(e) {
     .addToUi();
 
   // --- Photo JPG Helper menu ---
-  ui.createMenu('📸 Photo JPG Helper')
-    .addItem('Create JPG folders for PHOTO sessions', 'createJpgFoldersFromBoard')
-    .addToUi();
+  // Call the menu builder from the Photo ARW Parser script
+  // NOTE: Temporarily commented out - function not found in local files
+  // If you have a Photo Helpers.gs file in Google Apps Script, uncomment this line
+  // createPhotoJpgMenu();
 }
 
 const CFG = {
