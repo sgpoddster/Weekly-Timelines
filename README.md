@@ -33,21 +33,37 @@ This project provides an integrated system for tracking podcast recording sessio
 - Usage statistics across multiple sheets
 - Exclusion mode to view summaries without "Other/Event" category
 
-### 🎬 Integration Features
-- Session data integrity checking
-- Photo JPG folder management
-- HTML generation from existing JPGs
-- Email notifications and calendar sync capabilities
+### 🎬 Session Data Integrity
+- Validate camera and audio file counts
+- Check for remote session handling
+- Detect timestamp drift in recordings
+- File size variation checks
+- Email reports for data quality issues
+
+### 📸 Photo Management
+- ARW to JPG conversion via GCP Cloud Run
+- Automatic JPG folder creation for PHOTO sessions
+- HTML gallery generation
+- Email delivery of photo galleries
 
 ## Project Structure
 
+> **Note:** This is a combined project integrating code from multiple sources. See [`docs/modules.md`](docs/modules.md) for detailed module documentation.
+
+This project combines multiple feature modules into a single Google Apps Script deployment:
+
 ```
 SG Weekly Timelines/
-├── Code Scheduling.gs                  # Main menu and scheduling functions
-├── Code Timelines - Daily Usage.gs     # Daily/monthly usage tracking
-├── timeline by room.html               # Room timeline visualization UI
-├── timeline by operator.html           # Operator timeline visualization UI
-├── README.md                           # This file
+├── code.gs                            # Core timeline parsing and display
+├── Code Scheduling.gs                 # Operator assignment + master onOpen menu
+├── Code Timelines - Daily Usage.gs    # Daily/monthly usage tracking + dashboard
+├── Data Integrity.gs                  # Session data validation and checks
+├── Photo Helpers.gs                   # ARW to JPG conversion and management
+├── timeline by room.html              # Room timeline visualization UI
+├── timeline by operator.html          # Operator timeline visualization UI
+├── docs/
+│   └── modules.md                     # Detailed module documentation
+├── README.md                          # This file
 ├── CHANGELOG.md                        # Version history and changes
 ├── ARCHITECTURE.md                     # Technical architecture documentation
 └── IMPLEMENTATION_STATUS.md            # Daily usage implementation guide
