@@ -38,6 +38,66 @@ const UNKNOWN_STUDIO_DAILY = 'Other';
 
 
 /**
+ * Remove duplicate date rows from Studio Usage (Daily) and Set Usage (Daily) sheets
+ * Keeps the LAST occurrence of each date (most recently written = most accurate)
+ */
+function deduplicateDailyUsageSheets() {
+  const ui = SpreadsheetApp.getUi();
+  const sheetNames = ['Studio Usage (Daily)', 'Set Usage (Daily)'];
+  const ss = SpreadsheetApp.getActive();
+  let report = '';
+
+  sheetNames.forEach(function(sheetName) {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      report += sheetName + ': not found\n';
+      return;
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      report += sheetName + ': no data rows\n';
+      return;
+    }
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+
+    // Find which rows to delete (keep last occurrence of each date)
+    const seen = {};
+    const rowsToDelete = [];
+
+    // First pass: find last occurrence of each date
+    for (let r = 0; r < data.length; r++) {
+      const dateStr = String(data[r][0] || '').trim();
+      if (!dateStr) continue;
+      seen[dateStr] = r + 2; // 1-indexed, +1 for header
+    }
+
+    // Second pass: mark earlier duplicates for deletion
+    const lastOccurrence = new Set(Object.values(seen));
+    for (let r = 0; r < data.length; r++) {
+      const dateStr = String(data[r][0] || '').trim();
+      if (!dateStr) continue;
+      const rowNum = r + 2;
+      if (!lastOccurrence.has(rowNum)) {
+        rowsToDelete.push(rowNum);
+      }
+    }
+
+    // Delete rows in reverse order so indices don't shift
+    rowsToDelete.sort((a, b) => b - a);
+    rowsToDelete.forEach(function(rowNum) {
+      sheet.deleteRow(rowNum);
+    });
+
+    report += sheetName + ': removed ' + rowsToDelete.length + ' duplicate rows\n';
+  });
+
+  ui.alert('Deduplication Complete\n\n' + report + '\nRun "Backfill" to refresh the cleaned data.');
+}
+
+
+/**
  * Backfill daily studio usage - ONE MONTH ONLY (to avoid timeout)
  * User will be prompted to select which month
  */

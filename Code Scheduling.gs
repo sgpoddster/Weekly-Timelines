@@ -48,6 +48,7 @@ function onOpen(e) {
     .addSeparator()
     .addItem('🔄 Backfill Daily Studio Usage', 'backfillDailyStudioUsage')
     .addItem('🔄 Backfill Daily Set Usage', 'backfillDailySetUsage')
+    .addItem('🧹 Deduplicate Daily Usage Sheets', 'deduplicateDailyUsageSheets')
     .addSeparator()
     .addItem('📊 Monthly Studio Summary', 'showMonthlyStudioSummary')
     .addItem('📊 Monthly Set Summary', 'showMonthlySetSummary')

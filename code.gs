@@ -900,10 +900,10 @@ function _upsertDailyUsageRow_(opts) {
   let targetRow = -1;
 
   if (dataRows > 0) {
-    const colA = sh.getRange(2, 1, dataRows, 1).getValues();
-    const want = String(opts.label || '').trim().toLowerCase();
+    const colA = sh.getRange(2, 1, dataRows, 1).getDisplayValues(); // Must use getDisplayValues - getValues() returns Date objects which don't match strings
+    const want = String(opts.label || '').trim();
     for (let r = 0; r < dataRows; r++) {
-      if (String(colA[r][0] || '').trim().toLowerCase() === want) {
+      if (String(colA[r][0] || '').trim() === want) {
         targetRow = r + 2;
         break;
       }
