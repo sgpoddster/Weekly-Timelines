@@ -741,6 +741,7 @@ function _extractDayFromGroup_(groupStr) {
 function _getTimelinePayloadForSheet_(sheet) {
   const rng = sheet.getDataRange();
   const values = rng.getDisplayValues();
+  const rawValues = rng.getValues(); // Raw values give us actual Date objects from Sheets cells
 
   if (!values.length || !values[0].length) {
     throw new Error('Sheet looks empty.');
@@ -748,15 +749,26 @@ function _getTimelinePayloadForSheet_(sheet) {
 
   const { headerRowIdx, dayCols } = detectDaySegments_(values, 10);
 
-  const a1 = (values[0][0] || '').toString();
-  const weekInfo = parseWeekHeader(a1) || fallbackWeekInfo();
-
-  const mondayIndex = DAY_NAMES.indexOf('Monday');
+  // ALWAYS read dates from row 2 (headerRowIdx) cells - these are actual Sheets date cells
+  // NEVER use A1 text like "9th Mar - 15th Mar" as it may be missing or wrong format
   const dayToDate = {};
   for (const seg of dayCols) {
-    const base = new Date(weekInfo.mondayDate);
-    base.setDate(base.getDate() + (DAY_NAMES.indexOf(seg.day) - mondayIndex));
-    dayToDate[seg.day] = base;
+    // Try raw value first - if it's a proper Sheets Date cell, use it directly
+    const rawCell = rawValues[headerRowIdx][seg.startCol];
+    if (rawCell instanceof Date && !isNaN(rawCell.getTime())) {
+      const d = new Date(rawCell);
+      d.setHours(0, 0, 0, 0);
+      dayToDate[seg.day] = d;
+    } else {
+      // Fall back to parsing the display text e.g. "Monday, 9 March 2026"
+      const cellText = values[headerRowIdx][seg.startCol];
+      const parsed = _parseDateFromRow2Cell_(cellText);
+      if (parsed) {
+        dayToDate[seg.day] = parsed;
+      } else {
+        Logger.log('WARNING: Could not parse date from row 2 cell: "' + cellText + '" on sheet "' + sheet.getName() + '" - skipping day ' + seg.day);
+      }
+    }
   }
 
   const nameTimeRegex = /name\s*\/\s*time/i;
