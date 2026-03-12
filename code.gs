@@ -880,7 +880,9 @@ function _getTimelinePayloadForSheet_(sheet) {
           start,
           end,
           startMs: start.getTime(),
-          endMs: end.getTime()
+          endMs: end.getTime(),
+          rowIndex: r,                    // row in sheet values array (0-based)
+          colIndex: seg.startCol + t      // absolute col of time cell (0-based)
         });
       }
     }
