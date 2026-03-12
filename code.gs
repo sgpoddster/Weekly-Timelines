@@ -749,25 +749,51 @@ function _getTimelinePayloadForSheet_(sheet) {
 
   const { headerRowIdx, dayCols } = detectDaySegments_(values, 10);
 
-  // ALWAYS read dates from row 2 (headerRowIdx) cells - these are actual Sheets date cells
-  // NEVER use A1 text like "9th Mar - 15th Mar" as it may be missing or wrong format
+  // Build dayToDate map - try three methods in order of reliability:
+  // 1. Raw Date cell from row 2 (post-Nov 2025 sheets have actual date cells)
+  // 2. Text parsing of row 2 display value (e.g. "Monday, 9 March 2026")
+  // 3. A1 week header fallback (pre-Nov 2025 sheets have "Monday" text in row 2,
+  //    but A1 has parseable text like "9th Mar - 15th Mar")
+  // Never fall back to fallbackWeekInfo() as that returns the current week which
+  // causes all sessions to be wrongly attributed to the current week's dates.
   const dayToDate = {};
+
   for (const seg of dayCols) {
-    // Try raw value first - if it's a proper Sheets Date cell, use it directly
+    // Method 1: raw Date object from Sheets cell
     const rawCell = rawValues[headerRowIdx][seg.startCol];
     if (rawCell instanceof Date && !isNaN(rawCell.getTime())) {
       const d = new Date(rawCell);
       d.setHours(0, 0, 0, 0);
       dayToDate[seg.day] = d;
+      continue;
+    }
+    // Method 2: parse display text e.g. "Monday, 9 March 2026"
+    const cellText = values[headerRowIdx][seg.startCol];
+    const parsed = _parseDateFromRow2Cell_(cellText);
+    if (parsed) {
+      dayToDate[seg.day] = parsed;
+    }
+    // Method 3: A1 fallback handled below after the loop
+  }
+
+  // Method 3: if any days are still missing dates, try A1 week header
+  // (needed for old sheets where row 2 just says "Monday", "Tuesday" etc.)
+  const missingDays = dayCols.filter(seg => !dayToDate[seg.day]);
+  if (missingDays.length > 0) {
+    const a1 = (values[0][0] || '').toString();
+    const weekInfo = parseWeekHeader(a1);
+    if (weekInfo) {
+      const mondayIndex = DAY_NAMES.indexOf('Monday');
+      missingDays.forEach(seg => {
+        const base = new Date(weekInfo.mondayDate);
+        base.setDate(base.getDate() + (DAY_NAMES.indexOf(seg.day) - mondayIndex));
+        dayToDate[seg.day] = base;
+      });
     } else {
-      // Fall back to parsing the display text e.g. "Monday, 9 March 2026"
-      const cellText = values[headerRowIdx][seg.startCol];
-      const parsed = _parseDateFromRow2Cell_(cellText);
-      if (parsed) {
-        dayToDate[seg.day] = parsed;
-      } else {
-        Logger.log('WARNING: Could not parse date from row 2 cell: "' + cellText + '" on sheet "' + sheet.getName() + '" - skipping day ' + seg.day);
-      }
+      // All three methods failed - log and skip these days entirely
+      missingDays.forEach(seg => {
+        Logger.log('WARNING: Cannot determine date for ' + seg.day + ' on sheet "' + sheet.getName() + '" - sessions for this day will be skipped.');
+      });
     }
   }
 
