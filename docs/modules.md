@@ -39,6 +39,7 @@ This project combines multiple feature modules into a single Google Apps Script 
 **Key Functions:**
 - `backfillDailyStudioUsage()` - Populate historical studio data
 - `backfillDailySetUsage()` - Populate historical set data
+- `deduplicateDailyUsageSheets()` - Remove duplicate date rows from both daily usage sheets
 - `showMonthlyStudioSummary()` - Monthly studio report
 - `updateDashboard()` - Generate usage trend charts
 - `installDashboardTrigger()` - Schedule monthly updates
@@ -76,15 +77,18 @@ This project combines multiple feature modules into a single Google Apps Script 
 **Purpose:** ARW to JPG conversion and photo folder management
 
 **Key Functions:**
-- `createPhotoJpgMenu()` - Build photo helper menu
+- `createPhotoJpgMenu()` - Build photo helper menu (called by master `onOpen()`)
 - `convertArwFromActiveCell()` - Convert ARW files to JPG
 - `createJpgFoldersFromBoard()` - Create JPG folders for sessions
+- `scheduledAutoConverter()` - Hourly trigger: scans all sheets for PHOTO sessions and processes unprocessed ARW files
+- `installPhotoAutoConverterTrigger()` - Install/reinstall hourly auto-converter trigger
 - `sendTestEmailActiveRow()` - Test email delivery
 
 **Integration:**
 - Connects to GCP Cloud Run service for ARW conversion
 - Creates organized JPG folder structure
 - Generates HTML galleries
+- Hourly trigger respects 5-minute execution limit
 
 **Original Project:** Photo ARW Parser
 
@@ -98,7 +102,7 @@ onOpen() [Code Scheduling.gs]
   └── References: All menu functions from all modules
 
 Timeline Functions [code.gs]
-  └── Used by: Code Timelines - Daily Usage.gs
+  └── Used by: Code Timelines - Daily Usage.gs (via _getTimelinePayloadForSheet_)
 
 Constants [Code Scheduling.gs]
   ├── STUDIO_ORDER, SET_ORDER
@@ -108,7 +112,15 @@ Constants [Code Scheduling.gs]
 Helper Functions
   ├── pad2_() [Code Scheduling.gs]
   ├── detectDaySegments_() [code.gs]
-  └── Various date/parsing helpers [code.gs]
+  ├── _parseDateFromRow2Cell_() [code.gs]
+  ├── parseWeekHeader() [code.gs]
+  └── _upsertDailyUsageRow_() [code.gs]
+
+Triggers
+  ├── Hourly: scheduledAutoConverter() [Photo Helpers.gs]
+  ├── Daily 2am: autoUpdateYesterdayData() [Code Timelines - Daily Usage.gs]
+  ├── Monthly 1st 6am: updateDashboard() [Code Timelines - Daily Usage.gs]
+  └── Monthly 2nd 6am: sendMonthlySummaryEmail() [Code Timelines - Daily Usage.gs]
 ```
 
 ## Adding New Modules

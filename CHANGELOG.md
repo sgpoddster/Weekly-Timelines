@@ -1,8 +1,99 @@
-# Changelog - Daily Usage Tracking Fixes
+# Changelog
 
-## 2026-02-15 - Critical Fixes for Daily Usage Tracking
+## 2026-03-12 - Project Consolidation & Critical Bug Fixes
 
-### Latest Updates
+### Summary
+Major restructuring session: consolidated multiple separate Google Apps Script projects into one, fixed persistent menu failures, and fixed critical date detection bugs causing inflated usage statistics.
+
+---
+
+### 29. **Fix Date Detection for Old and New Sheet Formats** (Commit: 75082ea)
+- **Problem:** Backfill only found a fraction of expected dates (e.g. 11 dates for all of January)
+- **Root Cause (discovered via spreadsheet analysis):**
+  - Sheets before Nov 24 2025 store row 2 as plain text "Monday", "Tuesday" etc.
+  - Sheets from Nov 24 2025 onwards store row 2 as actual Google Sheets date cells
+  - Old code fell back to `fallbackWeekInfo()` (current week) when A1 couldn't be parsed
+  - Sessions from those weeks were wrongly attributed to the current week's dates
+- **Fix:** Three-method date detection in `_getTimelinePayloadForSheet_()`:
+  1. Raw Date object from row 2 cell (post-Nov sheets — most reliable)
+  2. Text parsing of row 2 display value e.g. "Monday, 9 March 2026"
+  3. A1 week header text fallback e.g. "9th Mar - 15th Mar" (pre-Nov sheets)
+  - If all three fail, day is skipped with a warning — never uses `fallbackWeekInfo()`
+- **Also identified:** Several Saturday cells in January have data entry errors (wrong dates or text "Saturday") — these must be manually corrected in the spreadsheet
+- **Files Modified:** `code.gs`
+
+---
+
+### 28. **Fix Duplicate Rows Causing Inflated Monthly Statistics** (Commit: 94ca6e7)
+- **Problem:** Monthly Studio/Set summaries showing impossible values (e.g. 2258h total, 112.9h/day average for February)
+- **Root Cause:** `_upsertDailyUsageRow_()` used `getValues()` to read column A for date matching. Google Sheets auto-converts "2026-02-01" strings to Date objects, so the string comparison always failed — every write **appended** a new row instead of updating the existing one, doubling all data
+- **Fix:** Changed `getValues()` to `getDisplayValues()` for the upsert date lookup
+- **Also Added:** `deduplicateDailyUsageSheets()` — removes duplicate date rows from Studio Usage (Daily) and Set Usage (Daily), accessible via menu
+- **Files Modified:** `code.gs`, `Code Scheduling.gs`, `Code Timelines - Daily Usage.gs`
+
+---
+
+### 27. **Add Scheduled Automatic ARW to JPG Conversion** (Commit: 4385445)
+- **Problem:** Google Apps Script sending hourly failure emails: "Script function not found: scheduledAutoConverter"
+- **Root Cause:** A time-based trigger was installed pointing to a function that no longer existed
+- **Fix:** Implemented `scheduledAutoConverter()` function that:
+  - Scans ALL sheets in the workbook for PHOTO sessions
+  - Processes any unprocessed ARW files (skips sessions already converted)
+  - Respects the 5-minute execution time limit
+  - Logs detailed statistics and errors
+  - Skips utility sheets (Dashboard, Studio Usage, Working Hours, etc.)
+- **Also Added:** `installPhotoAutoConverterTrigger()` — removes old trigger, installs new hourly trigger
+- **Menu Item:** 📸 Photo JPG Helper → ⚙️ Install Hourly Auto-Converter
+- **Action Required:** Delete the old orphaned trigger in Apps Script Triggers panel, then run Install Hourly Auto-Converter from the menu
+- **Files Modified:** `Photo Helpers.gs`
+
+---
+
+### 26. **Project Consolidation — Add Missing Files** (Commit: e96e4d3)
+- **Problem:** Google Apps Script project had files that existed only online, not locally, causing out-of-sync issues
+- **Fix:** Added two missing files to the local project:
+  - `Data Integrity.gs` — copied from SG Weekly Board Sanity Check project, with duplicate `onOpen()` and `pad2_()` removed
+  - `Photo Helpers.gs` — copied from Photo ARW Parser project
+- **Restored:** Full menu system in `Code Scheduling.gs` (previously commented out due to missing functions)
+- **Files Added:** `Data Integrity.gs`, `Photo Helpers.gs`
+- **Files Modified:** `Code Scheduling.gs`
+
+---
+
+### 25. **Remove Duplicate Constants and Functions** (Commits: 538e0b4, 4f91dbf)
+- **Problem:** Menus not appearing — "Identifier 'STUDIO_ORDER' has already been declared" error
+- **Root Cause:** Google Apps Script loads all .gs files into the same global scope. Multiple files declared the same constants and functions
+- **Duplicates Removed from `code.gs`:**
+  - Constants: `STUDIO_ORDER`, `SET_ORDER`, `SET_TO_STUDIO`, `UNKNOWN_STUDIO`
+- **Duplicates Removed from `Code Timelines - Daily Usage.gs`** (9 functions):
+  - `detectDaySegments_`, `parseWeekHeader`, `fallbackWeekInfo`, `monthNameToIndex`
+  - `_parseDateFromDayHeader_`, `_formatDateLabel_`, `_extractDayFromGroup_`
+  - `_getTimelinePayloadForSheet_`, `_upsertDailyUsageRow_`
+- **Files Modified:** `code.gs`, `Code Timelines - Daily Usage.gs`
+
+---
+
+### 24. **Fix Menu System — Multiple Syntax and Structural Errors** (Commits: 7fcb463, 2aaac14, d400012, 5d16845, 4131dae, dd51221)
+- **Problem:** Menus disappeared completely after code updates
+- **Causes and Fixes:**
+  - Apostrophe inside single-quoted strings on lines 1006 and 1309 of `Code Scheduling.gs` — changed to double quotes
+  - UTF-8 BOM at start of `code.gs` — removed
+  - Duplicate `generateBreakPlanOnActiveSheet()` function in `Code Scheduling.gs` — removed
+  - Missing opening `/*` on line 1 of `code.gs` (introduced when removing BOM) — restored
+  - Extra `/` on closing comment line (introduced in previous fix) — corrected
+- **Files Modified:** `code.gs`, `Code Scheduling.gs`
+
+---
+
+### 23. **Add Module Documentation for Combined Project** (Commit: 40e9554)
+- **Added:** `docs/modules.md` documenting all 5 modules, their functions, dependencies, and origins
+- **Updated:** `README.md` with new project structure, full feature list, and reference to module docs
+- **Files Added:** `docs/modules.md`
+- **Files Modified:** `README.md`
+
+---
+
+## 2026-02-15 - Dashboard & Analytics
 
 #### 22. **Add Dashboard with Usage Trend Charts** (Commit: fc881ee)
 - **New Feature:** Dashboard sheet with visual charts for tracking studio/set usage trends

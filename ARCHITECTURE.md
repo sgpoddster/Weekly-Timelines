@@ -4,6 +4,29 @@
 
 The Weekly Timelines system is a Google Apps Script application that integrates with Google Sheets to provide production scheduling, visualization, and analytics for podcast recording sessions.
 
+This is a **combined project** integrating five separate modules into a single Google Apps Script deployment. See `docs/modules.md` for detailed module documentation.
+
+## File Structure
+
+```
+SG Weekly Timelines/
+├── code.gs                           # Core timeline parsing + shared helper functions
+├── Code Scheduling.gs                # Master onOpen() + operator assignment
+├── Code Timelines - Daily Usage.gs   # Daily/monthly usage tracking + dashboard
+├── Data Integrity.gs                 # Session data validation and checks
+├── Photo Helpers.gs                  # ARW to JPG conversion and management
+├── timeline by room.html             # Room timeline visualization UI
+├── timeline by operator.html         # Operator timeline visualization UI
+├── docs/
+│   └── modules.md                    # Detailed per-module documentation
+├── README.md
+└── CHANGELOG.md
+```
+
+> **Important:** All .gs files share the same global scope in Google Apps Script.
+> Constants and functions must only be declared **once** across all files.
+> `onOpen()` must only exist in `Code Scheduling.gs`.
+
 ## Architecture Diagram
 
 ```
@@ -19,31 +42,43 @@ The Weekly Timelines system is a Google Apps Script application that integrates 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Google Apps Script Layer                             │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  Code Scheduling.gs - Menu System & Core Functions               │ │
-│  │  • onOpen() - Registers all menus                                 │ │
+│  │  Code Scheduling.gs — Menu System & Operator Assignment           │ │
+│  │  • onOpen() — Master menu builder (calls all module menus)        │ │
 │  │  • Operator assignment (assignEditorsOnActiveSheet)               │ │
-│  │  • Analytics (hours summary, break plans)                         │ │
-│  │  • Weekly studio/set usage                                        │ │
+│  │  • Analytics (hours summary, break plans, studio/set usage)       │ │
+│  │  • Shared constants: STUDIO_ORDER, SET_ORDER, SET_TO_STUDIO       │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  Code Timelines - Daily Usage.gs - Daily/Monthly Tracking        │ │
-│  │  • Daily usage parsing (parseSheetForDates)                       │ │
-│  │  • Automatic updates (autoUpdateYesterdayData at 2am)             │ │
-│  │  • Monthly summaries (showMonthlyStudioSummary, etc.)             │ │
-│  │  • Email reports (sendMonthlySummaryEmail)                        │ │
-│  │  • Backfill operations (backfillDailyStudioUsage)                 │ │
+│  │  code.gs — Core Parsing Engine & Shared Helpers                  │ │
+│  │  • detectDaySegments_() — Locate day columns in sheet             │ │
+│  │  • _getTimelinePayloadForSheet_() — Extract all sessions          │ │
+│  │  • _upsertDailyUsageRow_() — Write/update daily usage rows        │ │
+│  │  • parseWeekHeader() — A1 text fallback for date detection        │ │
+│  │  • _parseDateFromRow2Cell_() — Extract dates from Row 2 text      │ │
+│  │  • _isSessionCrossedOut_() — Detect strikethrough sessions        │ │
+│  │  • Timeline generators (getWeeklyTimelinePayload etc.)            │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  Core Parsing Engine                                              │ │
-│  │  • detectDaySegments_() - Locate day columns                      │ │
-│  │  • parseWeekHeader() - Extract week dates                         │ │
-│  │  • _parseDateFromRow2Cell_() - Extract dates from Row 2           │ │
-│  │  • _isSessionCrossedOut_() - Detect strikethrough sessions        │ │
+│  │  Code Timelines - Daily Usage.gs — Tracking & Dashboard           │ │
+│  │  • autoUpdateYesterdayData() — 2am daily trigger                  │ │
+│  │  • backfillDailyStudioUsage/Set() — Populate historical data      │ │
+│  │  • deduplicateDailyUsageSheets() — Fix duplicate rows             │ │
+│  │  • showMonthlyStudioSummary/Set() — Usage popup dialogs           │ │
+│  │  • updateDashboard() — Rebuild charts dashboard                   │ │
+│  │  • sendMonthlySummaryEmail() — Monthly email report               │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  Timeline Generators                                              │ │
-│  │  • getWeeklyTimelinePayload() - Room timeline data                │ │
-│  │  • getOperatorTimelinePayload() - Operator timeline data          │ │
+│  │  Data Integrity.gs — Session Validation                           │ │
+│  │  • runSanityToday/Yesterday/WholeTab() — Data checks              │ │
+│  │  • Camera, audio, timestamp drift validation                      │ │
+│  │  • sendSanityTestEmail() — Email integrity report                 │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  Photo Helpers.gs — ARW to JPG Conversion                         │ │
+│  │  • createPhotoJpgMenu() — Called by onOpen()                      │ │
+│  │  • scheduledAutoConverter() — Hourly trigger                      │ │
+│  │  • createJpgFoldersFromBoard() — Manual run                       │ │
+│  │  • installPhotoAutoConverterTrigger() — Install trigger           │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 └────────────────────────┬────────────────────────────────────────────────┘
                          │
@@ -54,32 +89,33 @@ The Weekly Timelines system is a Google Apps Script application that integrates 
 │  │ HTML Timeline Dialogs│  │ Monthly Summary      │  │ Email Reports│ │
 │  │ • timeline by room   │  │ Popups               │  │              │ │
 │  │ • timeline by        │  │ • Styled cards       │  │ • Styled     │ │
-│  │   operator           │  │ • Usage charts       │  │   summaries  │ │
+│  │   operator           │  │ • Usage bars         │  │   summaries  │ │
 │  │                      │  │ • Progress bars      │  │ • Sent 2nd   │ │
 │  │                      │  │                      │  │   of month   │ │
 │  └──────────────────────┘  └──────────────────────┘  └──────────────┘ │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │ Daily Usage Sheets (Auto-maintained)                            │   │
-│  │ • Studio Usage (Daily) - One row per date                       │   │
-│  │ • Set Usage (Daily) - One row per date                          │   │
-│  │ Format: Date | Studio1 Hours | Studio1 Count | ... | Total      │   │
+│  │ • Studio Usage (Daily) — One row per date, upserted by date key  │   │
+│  │ • Set Usage (Daily) — One row per date, upserted by date key     │   │
+│  │ Format: Date | Name (h) | Name (%) | Name (#) | ...             │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │ Dashboard Sheet (Auto-updated monthly)                          │   │
-│  │ • Studio Usage Trends - 6 month % chart with consistent colors  │   │
-│  │ • Set Usage Trends - 6 month % chart with consistent colors     │   │
-│  │ • Current Month Comparison - Hours bar chart                    │   │
+│  │ • Studio Usage Trends — 6 month % chart with consistent colors  │   │
+│  │ • Set Usage Trends — 6 month % chart with consistent colors     │   │
+│  │ • Current Month Comparison — Hours bar chart                    │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Time-Based Triggers                                  │
-│  • Daily 2am: autoUpdateYesterdayData() - Update previous day           │
-│  • Monthly 1st at 6am: updateDashboard() - Rebuild charts               │
-│  • Monthly 2nd at 6am: sendMonthlySummaryEmail() - Send report          │
+│  • Hourly: scheduledAutoConverter() — ARW to JPG processing             │
+│  • Daily 2am: autoUpdateYesterdayData() — Update previous day           │
+│  • Monthly 1st at 6am: updateDashboard() — Rebuild charts               │
+│  • Monthly 2nd at 6am: sendMonthlySummaryEmail() — Send report          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -87,29 +123,25 @@ The Weekly Timelines system is a Google Apps Script application that integrates 
 
 ### 1. Menu System
 
-**File**: `code.gs` (lines 12-59)
+**File**: `Code Scheduling.gs`
 
-The menu system provides user interface integration with Google Sheets through custom menus.
+Single master `onOpen()` function registers all menus. Module-specific menus are built by calling dedicated menu builder functions.
 
 ```javascript
 function onOpen(e)
-  ├── Creates "👩‍🎨 Assign Operators" menu
-  ├── Creates "⏱️ Timelines" menu
-  ├── Creates "🎬 Data Checker" menu
-  └── Creates "📸 Photo JPG Helper" menu
+  ├── Creates "🎨 Assign Operators" menu  [Code Scheduling.gs]
+  ├── Creates "🕐 Timelines" menu         [code.gs]
+  ├── Creates "🎬 Data Checker" menu      [Data Integrity.gs]
+  └── Calls createPhotoJpgMenu()          [Photo Helpers.gs]
 ```
 
-**Responsibilities**:
-- Register custom menus on sheet open
-- Link menu items to corresponding functions
-- Provide user-friendly access to all features
+**Critical rule**: Only ONE `onOpen()` may exist across all files. New modules must provide a menu builder function (e.g. `createMyModuleMenu()`) called from this `onOpen()`.
 
 ### 2. Core Parsing Engine
 
 #### 2.1 Day Detection System
 
-**Function**: `detectDaySegments_(values, maxScanRows)`
-**Lines**: 95-157
+**Function**: `detectDaySegments_(values, maxScanRows)` — `code.gs`
 
 **Purpose**: Locates day headers in the spreadsheet and determines the column ranges for each day.
 
@@ -119,71 +151,68 @@ function onOpen(e)
 2. For each cell, check if it starts with a day name from DAY_NAMES
 3. When found, mark that row as headerRowIdx
 4. Scan that row to build day segment array
-5. Each segment contains:
-   - day: Day name (e.g., "Monday")
-   - startCol: Starting column index
-   - endCol: Ending column index (or sheet width)
+5. Each segment: { day, startCol, endCol }
 6. Return { headerRowIdx, dayCols }
 ```
 
-**Flexibility**:
-- Accepts cells starting with day names (supports dates)
-- Scans multiple rows to find headers
-- Works with merged cells
-- Handles any column layout
-
-**Input**: 2D array of cell values from sheet
 **Output**:
 ```javascript
 {
-  headerRowIdx: 1,  // Row index where day headers found
+  headerRowIdx: 1,
   dayCols: [
     { day: "Monday", startCol: 2, endCol: 6 },
     { day: "Tuesday", startCol: 6, endCol: 10 },
-    // ...
   ]
 }
 ```
 
-#### 2.2 Week Header Parsing
+#### 2.2 Date Detection (Three-Method System)
 
-**Function**: `parseWeekHeader(txt)`
-**Lines**: 164-205
+**Function**: `_getTimelinePayloadForSheet_(sheet)` — `code.gs`
 
-**Purpose**: Extracts the Monday date for the week from cell A1.
+Dates for each day column are determined using three methods in priority order:
 
-**Supported Formats**:
-- "6th - 12th October"
-- "6th - 12th October 2026"
-- "13th January"
-- "13th January 2026"
-
-**Algorithm**:
 ```
-1. Try to match date range pattern (e.g., "6th - 12th October")
-2. If no match, try single date pattern (e.g., "13th January")
-3. Extract day number, month name, and optional year
-4. Convert month name to index (0-11)
-5. Create Date object for the first day mentioned
-6. Calculate Monday of that week
-7. Return { mondayDate, year }
+Method 1 — Raw Date cell (post-Nov 2025 sheets)
+  Row 2 cells contain actual Google Sheets Date objects
+  → rawValues[headerRowIdx][col] instanceof Date → use directly
+
+Method 2 — Text parsing of row 2 display value
+  Row 2 cells display "Monday, 9 March 2026"
+  → _parseDateFromRow2Cell_() regex match → use if valid
+
+Method 3 — A1 week header text (pre-Nov 2025 sheets)
+  Row 2 only has plain text "Monday", "Tuesday" etc.
+  A1 contains e.g. "9th Mar - 15th Mar"
+  → parseWeekHeader(a1) + day offset calculation
+
+If all three fail → skip the day, log a warning
+NEVER use fallbackWeekInfo() — it returns the current week
+and would attribute historical sessions to today's dates
 ```
 
-**Fallback**: If parsing fails, uses current week's Monday
+**Sheet format history**:
+- Sheets before Nov 24 2025: Row 2 = plain text day names → Method 3
+- Sheets from Nov 24 2025: Row 2 = actual date cells → Method 1
 
 #### 2.3 Constants
 
-**Lines**: 5-9
+**File**: `Code Scheduling.gs` (declared once, shared globally)
+
+```javascript
+const STUDIO_ORDER  = ['Studio 1', 'Studio 2', 'Studio 3', 'Studio 4', 'Other'];
+const SET_ORDER     = ['Iris', 'Club', 'Nest', 'Exec', 'Nova', 'Soho', 'Other'];
+const SET_TO_STUDIO = { 'iris': 'Studio 2', 'club': 'Studio 2', ... };
+const UNKNOWN_STUDIO = 'Other';
+```
+
+**File**: `code.gs`
 
 ```javascript
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 ```
 
-**Critical Dependency**: Used throughout the codebase for:
-- Day header detection
-- Day name standardization
-- Day-to-date mapping
-- Timeline generation
+**Critical Rule**: All constants declared **once** across all .gs files. Google Apps Script shares one global scope — duplicate `const` declarations cause a runtime error that silently prevents `onOpen()` from running and all menus disappearing.
 
 ### 3. Timeline Generation System
 
@@ -200,7 +229,7 @@ Sheet Data
    ↓
 detectDaySegments_() → Find day columns
    ↓
-parseWeekHeader() → Get week anchor date
+Three-method date detection (see §2.2) → Assign dates to day columns
    ↓
 Scan for "Name/Time" rows
    ↓
