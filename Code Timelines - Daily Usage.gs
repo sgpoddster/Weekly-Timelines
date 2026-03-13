@@ -107,7 +107,7 @@ function backfillDailyStudioUsage() {
   // Prompt for month
   const response = ui.prompt(
     'Backfill Studio Usage - Select Month',
-    'Enter month to backfill (1-12) or "all" for current month:\nExample: 1 for January, 2 for February, etc.',
+    'Enter month to backfill:\n• MM/YYYY for a specific year (e.g. 9/2025 for Sep 2025)\n• 1-12 for a month in the current year\n• "all" for the current month',
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -118,13 +118,22 @@ function backfillDailyStudioUsage() {
   let startDate, endDate;
 
   if (input === 'all' || input === '') {
-    // Current month only
     startDate = new Date(today.getFullYear(), today.getMonth(), 1);
     endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else if (input.indexOf('/') !== -1) {
+    const parts = input.split('/');
+    const monthNum = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12 || isNaN(year) || year < 2020 || year > today.getFullYear()) {
+      ui.alert('Invalid format. Use MM/YYYY, e.g. 9/2025 for September 2025.');
+      return;
+    }
+    startDate = new Date(year, monthNum - 1, 1);
+    endDate = new Date(year, monthNum, 0);
   } else {
     const monthNum = parseInt(input, 10);
     if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-      ui.alert('Invalid month number. Please enter 1-12.');
+      ui.alert('Invalid month. Enter 1-12, MM/YYYY, or "all".');
       return;
     }
     startDate = new Date(today.getFullYear(), monthNum - 1, 1);
@@ -176,7 +185,7 @@ function backfillDailySetUsage() {
   // Prompt for month
   const response = ui.prompt(
     'Backfill Set Usage - Select Month',
-    'Enter month to backfill (1-12) or "all" for current month:\nExample: 1 for January, 2 for February, etc.',
+    'Enter month to backfill:\n• MM/YYYY for a specific year (e.g. 9/2025 for Sep 2025)\n• 1-12 for a month in the current year\n• "all" for the current month',
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -187,13 +196,22 @@ function backfillDailySetUsage() {
   let startDate, endDate;
 
   if (input === 'all' || input === '') {
-    // Current month only
     startDate = new Date(today.getFullYear(), today.getMonth(), 1);
     endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else if (input.indexOf('/') !== -1) {
+    const parts = input.split('/');
+    const monthNum = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12 || isNaN(year) || year < 2020 || year > today.getFullYear()) {
+      ui.alert('Invalid format. Use MM/YYYY, e.g. 9/2025 for September 2025.');
+      return;
+    }
+    startDate = new Date(year, monthNum - 1, 1);
+    endDate = new Date(year, monthNum, 0);
   } else {
     const monthNum = parseInt(input, 10);
     if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-      ui.alert('Invalid month number. Please enter 1-12.');
+      ui.alert('Invalid month. Enter 1-12, MM/YYYY, or "all".');
       return;
     }
     startDate = new Date(today.getFullYear(), monthNum - 1, 1);
