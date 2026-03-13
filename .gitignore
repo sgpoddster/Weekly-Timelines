@@ -52,5 +52,6 @@ temp/
 .env.local
 .env.*.local
 
-# Claude Code
-.claude/
+# Claude Code — ignore personal settings, but commit project settings
+.claude/settings.local.json
+.claude/memory/
