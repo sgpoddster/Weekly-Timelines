@@ -683,86 +683,97 @@ function _writeSectionHeader_(sheet, row, text) {
 }
 
 /**
- * Create one LINE chart per label arranged in a 2-column grid.
- * Each chart shows that label's hours over time.
+ * Create one COLUMN chart per label arranged in a 2-column grid.
+ * Each chart has its own small data table (Month | Hours | Annotation)
+ * so that Google Charts shows the value on top of each bar.
  * Returns the next available row after all charts.
  */
 function _createIndividualCharts_(sheet, months, data, startRow, colors, labels) {
   if (!labels || labels.length === 0) return startRow;
 
-  var CHART_ROWS = 20;  // height in rows per chart
-  var LEFT_COL   = 1;
-  var RIGHT_COL  = 8;   // second column starts at col 8 (~half sheet width)
+  var n          = months.length;
+  var DATA_ROWS  = n + 1;        // header + one row per month
+  var CHART_ROWS = 22;           // chart height in rows
+  var GAP        = 2;
+  var ROW_BLOCK  = DATA_ROWS + 1 + CHART_ROWS + GAP;  // full block height per row of charts
 
-  // Write a shared data table (all labels) once — individual charts reference slices of it
-  var tableRow   = startRow;
-  var numCols    = labels.length + 1;
-  var numRows    = months.length + 1;
+  var LEFT_COL  = 1;
+  var RIGHT_COL = 8;  // cols 8-10 for right-hand tables/charts
 
-  // Header
-  sheet.getRange(tableRow, 1, 1, numCols)
-    .setValues([['Month'].concat(labels)])
-    .setFontWeight('bold');
-  // Force month col to text
-  sheet.getRange(tableRow + 1, 1, months.length, 1).setNumberFormat('@');
-  // Data
-  var dataRows = months.map(function(m) {
-    var mk = m.year + '-' + String(m.month).padStart(2, '0');
-    return [m.name].concat(labels.map(function(lbl) {
-      return Math.round((data.hours[lbl][mk] || 0) * 100) / 100;
-    }));
-  });
-  sheet.getRange(tableRow + 1, 1, months.length, numCols).setValues(dataRows);
-  sheet.getRange(tableRow + 1, 2, months.length, labels.length).setNumberFormat('0.0');
-
-  // Place individual charts in a 2-column grid below the data table
-  var chartStartRow = tableRow + numRows + 1;
-  var row = chartStartRow;
-  var col = LEFT_COL;
+  var leftRow  = startRow;
+  var rightRow = startRow;
 
   labels.forEach(function(label, idx) {
-    var dataCol = idx + 2; // 1-based: col 1 = Month, col 2 = first label, etc.
+    var isLeft   = (idx % 2 === 0);
+    var tableRow = isLeft ? leftRow : rightRow;
+    var tableCol = isLeft ? LEFT_COL : RIGHT_COL;
 
-    // Domain range (month labels)
-    var domainRange = sheet.getRange(tableRow, 1, numRows, 1);
-    // Data range for this one label (header + values)
-    var seriesRange = sheet.getRange(tableRow, dataCol, numRows, 1);
-
+    // ------------------------------------------------------------------
+    // Data table: 3 columns — Month (text) | Hours (num) | Annotation (str)
+    // Google Charts treats a string column immediately after a number column
+    // in the same range as an annotation → value appears above the bar.
+    // ------------------------------------------------------------------
     var labelColor = colors[idx] || '#4285f4';
 
+    // Header row (annotation header = '' so no legend entry for it)
+    sheet.getRange(tableRow, tableCol, 1, 3)
+      .setValues([['Month', label, '']])
+      .setFontWeight('bold');
+
+    // Force month column to plain text so Sheets doesn't parse dates
+    sheet.getRange(tableRow + 1, tableCol, n, 1).setNumberFormat('@');
+
+    // Data rows: [month-label, hours-number, "X.X" annotation string]
+    var rows = months.map(function(m) {
+      var mk  = m.year + '-' + String(m.month).padStart(2, '0');
+      var val = Math.round((data.hours[label][mk] || 0) * 10) / 10;
+      return [m.name, val, val.toFixed(1)];
+    });
+    sheet.getRange(tableRow + 1, tableCol, n, 3).setValues(rows);
+    sheet.getRange(tableRow + 1, tableCol + 1, n, 1).setNumberFormat('0.0');
+
+    // ------------------------------------------------------------------
+    // Column chart using the full 3-column range
+    // ------------------------------------------------------------------
+    var chartRow  = tableRow + DATA_ROWS + 1;
+    var fullRange = sheet.getRange(tableRow, tableCol, DATA_ROWS, 3);
+
     var chart = sheet.newChart()
-      .setChartType(Charts.ChartType.LINE)
-      .addRange(domainRange)
-      .addRange(seriesRange)
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(fullRange)
       .setNumHeaders(1)
-      .setPosition(row, col, 0, 0)
+      .setPosition(chartRow, tableCol, 0, 0)
       .setOption('title', label + ' — Hours per Month')
       .setOption('titleTextStyle', { fontSize: 12, bold: true, color: labelColor })
-      .setOption('height', 300)
-      .setOption('width', 440)
+      .setOption('height', 320)
+      .setOption('width', 460)
       .setOption('legend', { position: 'none' })
       .setOption('colors', [labelColor])
       .setOption('vAxis', { title: 'Hours', minValue: 0 })
       .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
-      .setOption('lineWidth', 3)
-      .setOption('pointSize', 6)
+      .setOption('annotations', {
+        alwaysOutside: false,
+        textStyle: { fontSize: 10, bold: true, color: '#333333' },
+        stem: { color: 'transparent' }
+      })
       .build();
 
     sheet.insertChart(chart);
 
-    // Alternate columns; move down a row-block after every 2 charts
-    if (col === LEFT_COL) {
-      col = RIGHT_COL;
+    // Advance rows: after filling the right slot, move both cursors down one block
+    if (isLeft) {
+      // right-side row will be set on next iteration (same block start)
+      rightRow = leftRow;
     } else {
-      col = LEFT_COL;
-      row += CHART_ROWS;
+      leftRow  += ROW_BLOCK;
+      rightRow += ROW_BLOCK;
     }
   });
 
-  // If odd number of labels, the last chart was on the left — still need to advance row
-  if (labels.length % 2 !== 0) row += CHART_ROWS;
+  // If odd number of labels, left side still needs to advance
+  if (labels.length % 2 !== 0) leftRow += ROW_BLOCK;
 
-  return row + 2;
+  return Math.max(leftRow, rightRow) + 2;
 }
 
 /**
