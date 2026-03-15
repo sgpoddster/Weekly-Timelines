@@ -683,22 +683,37 @@ function _writeSectionHeader_(sheet, row, text) {
 }
 
 /**
- * Create one COLUMN chart per label arranged in a 2-column grid.
- * Each chart has its own small data table (Month | Hours | Annotation)
- * so that Google Charts shows the value on top of each bar.
+ * Lighten a hex colour towards white by `factor` (0 = unchanged, 1 = white).
+ */
+function _lightenColor_(hex, factor) {
+  var r = parseInt(hex.slice(1, 3), 16);
+  var g = parseInt(hex.slice(3, 5), 16);
+  var b = parseInt(hex.slice(5, 7), 16);
+  r = Math.round(r + (255 - r) * factor);
+  g = Math.round(g + (255 - g) * factor);
+  b = Math.round(b + (255 - b) * factor);
+  return '#' + ('0' + r.toString(16)).slice(-2)
+             + ('0' + g.toString(16)).slice(-2)
+             + ('0' + b.toString(16)).slice(-2);
+}
+
+/**
+ * Create one dual-series COLUMN chart per label in a 2-column grid.
+ * Each month shows TWO bars: Hours (left axis) + % of total (right axis).
+ * Values are labelled above each bar.
  * Returns the next available row after all charts.
  */
 function _createIndividualCharts_(sheet, months, data, startRow, colors, labels) {
   if (!labels || labels.length === 0) return startRow;
 
   var n          = months.length;
-  var DATA_ROWS  = n + 1;        // header + one row per month
-  var CHART_ROWS = 22;           // chart height in rows
+  var DATA_ROWS  = n + 1;       // header + one row per month
+  var CHART_ROWS = 22;
   var GAP        = 2;
-  var ROW_BLOCK  = DATA_ROWS + 1 + CHART_ROWS + GAP;  // full block height per row of charts
+  var ROW_BLOCK  = DATA_ROWS + 1 + CHART_ROWS + GAP;
 
   var LEFT_COL  = 1;
-  var RIGHT_COL = 8;  // cols 8-10 for right-hand tables/charts
+  var RIGHT_COL = 8;  // cols 8-10 for right-hand tables
 
   var leftRow  = startRow;
   var rightRow = startRow;
@@ -708,68 +723,67 @@ function _createIndividualCharts_(sheet, months, data, startRow, colors, labels)
     var tableRow = isLeft ? leftRow : rightRow;
     var tableCol = isLeft ? LEFT_COL : RIGHT_COL;
 
-    var labelColor = colors[idx] || '#4285f4';
+    var solidColor  = colors[idx] || '#4285f4';
+    var lightColor  = _lightenColor_(solidColor, 0.45);  // lighter shade for % bars
 
     // ------------------------------------------------------------------
-    // Data table: 2 columns only — Month (text) | Hours (num)
-    // We do NOT use an annotation column. Instead we use the series-level
-    // 'annotations' option which maps to the chart editor's "Data labels"
-    // checkbox and reads directly from the series values.
+    // Data table: Month | Hours | %
     // ------------------------------------------------------------------
-
-    // Header row
-    sheet.getRange(tableRow, tableCol, 1, 2)
-      .setValues([['Month', label]])
+    sheet.getRange(tableRow, tableCol, 1, 3)
+      .setValues([['Month', 'Hours', '%']])
       .setFontWeight('bold');
 
-    // Force month column to plain text so Sheets doesn't parse dates
+    // Month column as plain text so Sheets doesn't parse as dates
     sheet.getRange(tableRow + 1, tableCol, n, 1).setNumberFormat('@');
 
-    // Data rows: [month-label, hours-number]
     var rows = months.map(function(m) {
       var mk  = m.year + '-' + String(m.month).padStart(2, '0');
-      var val = Math.round((data.hours[label][mk] || 0) * 10) / 10;
-      return [m.name, val];
+      var hrs = Math.round((data.hours[label][mk]       || 0) * 10) / 10;
+      var pct = Math.round((data.percentages[label][mk] || 0) * 10) / 10;
+      return [m.name, hrs, pct];
     });
-    sheet.getRange(tableRow + 1, tableCol, n, 2).setValues(rows);
-    sheet.getRange(tableRow + 1, tableCol + 1, n, 1).setNumberFormat('0.0');
+    sheet.getRange(tableRow + 1, tableCol, n, 3).setValues(rows);
+    sheet.getRange(tableRow + 1, tableCol + 1, n, 2).setNumberFormat('0.0');
 
     // ------------------------------------------------------------------
-    // Column chart — series[0].annotations enables the "Data labels"
-    // feature (same as the chart editor checkbox) so values appear above bars
+    // Dual-axis grouped column chart
+    //   Series 0 (Hours) → left Y-axis
+    //   Series 1 (%)     → right Y-axis (0–100)
     // ------------------------------------------------------------------
     var chartRow  = tableRow + DATA_ROWS + 1;
-    var dataRange = sheet.getRange(tableRow, tableCol, DATA_ROWS, 2);
+    var dataRange = sheet.getRange(tableRow, tableCol, DATA_ROWS, 3);
+
+    var annotStyle = {
+      alwaysOutside: true,
+      textStyle: { fontSize: 10, bold: true, color: '#333333', auraColor: 'none' },
+      stem: { color: 'transparent', length: 4 }
+    };
 
     var chart = sheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
       .addRange(dataRange)
       .setNumHeaders(1)
       .setPosition(chartRow, tableCol, 0, 0)
-      .setOption('title', label + ' — Hours per Month')
-      .setOption('titleTextStyle', { fontSize: 12, bold: true, color: labelColor })
+      .setOption('title', label + ' — Hours & % of Total')
+      .setOption('titleTextStyle', { fontSize: 12, bold: true, color: solidColor })
       .setOption('height', 320)
-      .setOption('width', 460)
-      .setOption('legend', { position: 'none' })
-      .setOption('colors', [labelColor])
-      .setOption('vAxis', { title: 'Hours', minValue: 0 })
-      .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
+      .setOption('width', 480)
+      .setOption('legend', { position: 'bottom' })
+      .setOption('colors', [solidColor, lightColor])
       .setOption('series', {
-        0: {
-          annotations: {
-            alwaysOutside: true,
-            textStyle: { fontSize: 11, bold: true, color: '#333333', auraColor: 'none' },
-            stem: { color: 'transparent', length: 4 }
-          }
-        }
+        0: { targetAxisIndex: 0, annotations: annotStyle },
+        1: { targetAxisIndex: 1, annotations: annotStyle }
       })
+      .setOption('vAxes', {
+        0: { title: 'Hours', minValue: 0 },
+        1: { title: '% of total', minValue: 0, maxValue: 100 }
+      })
+      .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
       .build();
 
     sheet.insertChart(chart);
 
-    // Advance rows: after filling the right slot, move both cursors down one block
     if (isLeft) {
-      // right-side row will be set on next iteration (same block start)
       rightRow = leftRow;
     } else {
       leftRow  += ROW_BLOCK;
@@ -777,7 +791,6 @@ function _createIndividualCharts_(sheet, months, data, startRow, colors, labels)
     }
   });
 
-  // If odd number of labels, left side still needs to advance
   if (labels.length % 2 !== 0) leftRow += ROW_BLOCK;
 
   return Math.max(leftRow, rightRow) + 2;
