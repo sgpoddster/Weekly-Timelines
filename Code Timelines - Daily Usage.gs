@@ -456,32 +456,52 @@ function updateDashboard() {
   // Studios h : data at row 4+numMonths+2+20+2, chart after that
   // Sets %    : ...
   // Sets h    : ...
-  const n = months.length; // number of months
-  const BLOCK = n + 1 + 2 + 20 + 2; // data rows + spacer + chart rows + spacer
+  const n = months.length;
+  const CHART_H = 22;  // rows a chart occupies
+  const BLOCK   = (n + 1) + 1 + CHART_H + 2; // data + gap + chart + gap
 
-  const R_STUDIO_PCT  = 4;
-  const R_STUDIO_H    = R_STUDIO_PCT  + BLOCK;
-  const R_SET_PCT     = R_STUDIO_H    + BLOCK;
-  const R_SET_H       = R_SET_PCT     + BLOCK;
-
-  _createTrendBlock_(dashboard, months, monthlyData.studios, R_STUDIO_PCT,
+  // ── Section 1: Overview — all studios together ───────────────────
+  var R = 4;
+  _writeSectionHeader_(dashboard, R - 1, '📊 Studio Overview');
+  _createTrendBlock_(dashboard, months, monthlyData.studios, R,
     'Studio Usage — % of Total Hours', 'pct', _getStudioColors_(monthlyData.studios.labels));
-  _createTrendBlock_(dashboard, months, monthlyData.studios, R_STUDIO_H,
-    'Studio Usage — Hours per Month',  'h',   _getStudioColors_(monthlyData.studios.labels));
-  _createTrendBlock_(dashboard, months, monthlyData.sets, R_SET_PCT,
-    'Set Usage — % of Total Hours',    'pct', _getSetColors_(monthlyData.sets.labels));
-  _createTrendBlock_(dashboard, months, monthlyData.sets, R_SET_H,
-    'Set Usage — Hours per Month',     'h',   _getSetColors_(monthlyData.sets.labels));
+  R += BLOCK;
+  _createTrendBlock_(dashboard, months, monthlyData.studios, R,
+    'Studio Usage — Hours per Month', 'h', _getStudioColors_(monthlyData.studios.labels));
+  R += BLOCK;
+
+  // ── Section 2: Overview — all sets together ──────────────────────
+  _writeSectionHeader_(dashboard, R - 1, '📊 Set Overview');
+  _createTrendBlock_(dashboard, months, monthlyData.sets, R,
+    'Set Usage — % of Total Hours', 'pct', _getSetColors_(monthlyData.sets.labels));
+  R += BLOCK;
+  _createTrendBlock_(dashboard, months, monthlyData.sets, R,
+    'Set Usage — Hours per Month', 'h', _getSetColors_(monthlyData.sets.labels));
+  R += BLOCK;
+
+  // ── Section 3: Individual studio charts (2-column grid) ──────────
+  _writeSectionHeader_(dashboard, R - 1, '🏢 Individual Studios');
+  R = _createIndividualCharts_(dashboard, months, monthlyData.studios, R,
+    _getStudioColors_(monthlyData.studios.labels), monthlyData.studios.labels);
+  R += 2;
+
+  // ── Section 4: Individual set charts (2-column grid) ─────────────
+  _writeSectionHeader_(dashboard, R - 1, '🎬 Individual Sets');
+  _createIndividualCharts_(dashboard, months, monthlyData.sets, R,
+    _getSetColors_(monthlyData.sets.labels), monthlyData.sets.labels);
 
   SpreadsheetApp.getUi().alert('Dashboard updated successfully!');
 }
 
+// Data collection started October 2025 — always chart from here
+var DASHBOARD_START_YEAR  = 2025;
+var DASHBOARD_START_MONTH = 9; // 0-based: 9 = October
+
 /**
- * Get monthly aggregated data from Daily Usage sheets
- * Returns last N months of data (default 12)
+ * Get monthly aggregated data from Daily Usage sheets.
+ * Always starts from October 2025 up to last complete month.
  */
-function _getMonthlyAggregatedData_(numMonths) {
-  numMonths = numMonths || 12;
+function _getMonthlyAggregatedData_() {
   const ss = SpreadsheetApp.getActive();
   const studioSheet = ss.getSheetByName('Studio Usage (Daily)');
   const setSheet = ss.getSheetByName('Set Usage (Daily)');
@@ -490,18 +510,20 @@ function _getMonthlyAggregatedData_(numMonths) {
     throw new Error('Daily Usage sheets not found. Please run backfill first.');
   }
 
-  // Get last N complete months
+  // Build month list from Oct 2025 to last complete month
   const now = new Date();
+  const lastCompleteMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const months = [];
-  for (let i = numMonths; i >= 1; i--) {
-    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  const cursor = new Date(DASHBOARD_START_YEAR, DASHBOARD_START_MONTH, 1);
+  while (cursor <= lastCompleteMonth) {
     months.push({
-      date: monthDate,
-      // Use a format that Sheets will NOT auto-convert to a date, e.g. "Sep-2025"
-      name: monthDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', '-'),
-      year: monthDate.getFullYear(),
-      month: monthDate.getMonth()
+      date:  new Date(cursor),
+      // "Oct-2025" format — dash prevents Sheets auto-parsing as a date
+      name:  cursor.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', '-'),
+      year:  cursor.getFullYear(),
+      month: cursor.getMonth()
     });
+    cursor.setMonth(cursor.getMonth() + 1);
   }
 
   const studios = _aggregateByMonth_(studioSheet, months);
@@ -644,6 +666,103 @@ function _createTrendBlock_(sheet, months, data, startRow, title, metric, colors
     .setOption('colors', colors);
 
   sheet.insertChart(chartBuilder.build());
+}
+
+/**
+ * Write a bold section heading into a single merged cell row.
+ */
+function _writeSectionHeader_(sheet, row, text) {
+  if (row < 1) return;
+  sheet.getRange(row, 1, 1, 12)
+    .merge()
+    .setValue(text)
+    .setFontSize(13)
+    .setFontWeight('bold')
+    .setBackground('#e8f0fe')
+    .setFontColor('#1a73e8');
+}
+
+/**
+ * Create one LINE chart per label arranged in a 2-column grid.
+ * Each chart shows that label's hours over time.
+ * Returns the next available row after all charts.
+ */
+function _createIndividualCharts_(sheet, months, data, startRow, colors, labels) {
+  if (!labels || labels.length === 0) return startRow;
+
+  var CHART_ROWS = 20;  // height in rows per chart
+  var LEFT_COL   = 1;
+  var RIGHT_COL  = 8;   // second column starts at col 8 (~half sheet width)
+
+  // Write a shared data table (all labels) once — individual charts reference slices of it
+  var tableRow   = startRow;
+  var numCols    = labels.length + 1;
+  var numRows    = months.length + 1;
+
+  // Header
+  sheet.getRange(tableRow, 1, 1, numCols)
+    .setValues([['Month'].concat(labels)])
+    .setFontWeight('bold');
+  // Force month col to text
+  sheet.getRange(tableRow + 1, 1, months.length, 1).setNumberFormat('@');
+  // Data
+  var dataRows = months.map(function(m) {
+    var mk = m.year + '-' + String(m.month).padStart(2, '0');
+    return [m.name].concat(labels.map(function(lbl) {
+      return Math.round((data.hours[lbl][mk] || 0) * 100) / 100;
+    }));
+  });
+  sheet.getRange(tableRow + 1, 1, months.length, numCols).setValues(dataRows);
+  sheet.getRange(tableRow + 1, 2, months.length, labels.length).setNumberFormat('0.0');
+
+  // Place individual charts in a 2-column grid below the data table
+  var chartStartRow = tableRow + numRows + 1;
+  var row = chartStartRow;
+  var col = LEFT_COL;
+
+  labels.forEach(function(label, idx) {
+    var dataCol = idx + 2; // 1-based: col 1 = Month, col 2 = first label, etc.
+
+    // Domain range (month labels)
+    var domainRange = sheet.getRange(tableRow, 1, numRows, 1);
+    // Data range for this one label (header + values)
+    var seriesRange = sheet.getRange(tableRow, dataCol, numRows, 1);
+
+    var labelColor = colors[idx] || '#4285f4';
+
+    var chart = sheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(domainRange)
+      .addRange(seriesRange)
+      .setNumHeaders(1)
+      .setPosition(row, col, 0, 0)
+      .setOption('title', label + ' — Hours per Month')
+      .setOption('titleTextStyle', { fontSize: 12, bold: true, color: labelColor })
+      .setOption('height', 300)
+      .setOption('width', 440)
+      .setOption('legend', { position: 'none' })
+      .setOption('colors', [labelColor])
+      .setOption('vAxis', { title: 'Hours', minValue: 0 })
+      .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
+      .setOption('lineWidth', 3)
+      .setOption('pointSize', 6)
+      .build();
+
+    sheet.insertChart(chart);
+
+    // Alternate columns; move down a row-block after every 2 charts
+    if (col === LEFT_COL) {
+      col = RIGHT_COL;
+    } else {
+      col = LEFT_COL;
+      row += CHART_ROWS;
+    }
+  });
+
+  // If odd number of labels, the last chart was on the left — still need to advance row
+  if (labels.length % 2 !== 0) row += CHART_ROWS;
+
+  return row + 2;
 }
 
 /**
