@@ -62,6 +62,16 @@ var DASH_IV_P_CHART_START_ROW = DASH_IV_P_SECTION_ROW + 1;                      
 var DASH_LEFT_CHART_COL  = 1;
 var DASH_RIGHT_CHART_COL = 9;
 
+// ── Summary charts (total hours/month + hours/week) ─────────────────────────
+// Placed below the individual set charts
+// 6 set charts → 3 pairs → 3×32 = 96 rows; +2 gap gives section header row
+var DASH_SUM_SECTION_ROW  = DASH_IV_P_CHART_START_ROW + 3 * DASH_IV_ROW_BLOCK + 2;  // 168
+var DASH_SUM_CHART_ROW    = DASH_SUM_SECTION_ROW + 1;                                // 169
+// Hidden columns: monthly = 2 cols, weekly = 2 cols
+var DASH_SUM_MONTHLY_COL  = 68;   // cols 68-69: Month | Total Hours
+var DASH_SUM_WEEKLY_COL   = 70;   // cols 70-71: Week  | Total Hours
+var DASH_SUM_MAX_WEEKS    = 300;  // pre-allocate ~6 years of weekly rows
+
 
 /* ==================================================
  * PUBLIC MENU FUNCTIONS
@@ -489,6 +499,7 @@ function setupDashboard() {
   // Section headers at fixed rows
   _writeSectionHeader_(dashboard, DASH_IV_S_SECTION_ROW, '🏢 Individual Studios');
   _writeSectionHeader_(dashboard, DASH_IV_P_SECTION_ROW, '🎬 Individual Sets');
+  _writeSectionHeader_(dashboard, DASH_SUM_SECTION_ROW,  '📈 Summary Totals');
 
   // Pre-allocated range size (header + 60 months)
   var totalRows = DASH_MAX_MONTHS + 1;
@@ -502,6 +513,9 @@ function setupDashboard() {
 
   _insertIndivCharts_(dashboard, setLabels, DASH_IV_P_CHART_START_ROW,
     DASH_IV_P_COL_MAP, _getSetColors_(setLabels), totalRows);
+
+  // ── Summary charts ────────────────────────────────────────────────
+  _insertSummaryCharts_(dashboard);
 
   SpreadsheetApp.getUi().alert(
     'Dashboard set up successfully! ✅\n\n' +
@@ -539,9 +553,12 @@ function updateDashboardData() {
  * Called by both setupDashboard() and updateDashboardData().
  */
 function _writeDashboardData_(dashboard, monthlyData) {
-  // Individual chart blocks only (overview charts removed)
+  // Individual chart blocks
   _writeIndivBlock_(dashboard, monthlyData.months, monthlyData.studios, DASH_IV_S_COL_MAP);
   _writeIndivBlock_(dashboard, monthlyData.months, monthlyData.sets,    DASH_IV_P_COL_MAP);
+
+  // Summary totals (monthly + weekly)
+  _writeSummaryData_(dashboard, monthlyData);
 
   // Update "last updated" line
   dashboard.getRange('A2').setValue(
@@ -721,6 +738,174 @@ function _aggregateByMonth_(sheet, months) {
 
   return { labels: labels, percentages: percentages, hours: hours };
 }
+
+/* ==================================================
+ * SUMMARY CHART FUNCTIONS (total hours/month + hours/week)
+ * ================================================== */
+
+/**
+ * Add the two summary charts to an existing dashboard.
+ * Run this once from the menu — no full rebuild required.
+ */
+function addSummaryCharts() {
+  var ss = SpreadsheetApp.getActive();
+  var dashboard = ss.getSheetByName('Dashboard');
+  if (!dashboard) {
+    SpreadsheetApp.getUi().alert('Dashboard sheet not found. Run setupDashboard() first.');
+    return;
+  }
+  var monthlyData = _getMonthlyAggregatedData_();
+  _writeSummaryData_(dashboard, monthlyData);
+  _writeSectionHeader_(dashboard, DASH_SUM_SECTION_ROW, '📈 Summary Totals');
+  _insertSummaryCharts_(dashboard);
+  SpreadsheetApp.getUi().alert('Summary charts added! ✅');
+}
+
+/**
+ * Write monthly totals and weekly totals to the hidden summary columns.
+ * Called by _writeDashboardData_() so runs on every data refresh.
+ */
+function _writeSummaryData_(dashboard, monthlyData) {
+  var months = monthlyData.months;
+  var n      = months.length;
+
+  // ── Monthly totals (sum of ALL studio hours per month) ─────────────
+  var mCol = DASH_SUM_MONTHLY_COL;
+  dashboard.getRange(DASH_DATA_ROW, mCol, 1, 2)
+    .setValues([['Month', 'Total Hours']]).setFontWeight('bold');
+  dashboard.getRange(DASH_DATA_ROW + 1, mCol,     DASH_MAX_MONTHS, 1).setNumberFormat('@');
+  dashboard.getRange(DASH_DATA_ROW + 1, mCol + 1, DASH_MAX_MONTHS, 1).setNumberFormat('0.0');
+  dashboard.getRange(DASH_DATA_ROW + 1, mCol, DASH_MAX_MONTHS, 2).clearContent();
+
+  if (n > 0) {
+    var mRows = months.map(function(m) {
+      var mk    = m.year + '-' + String(m.month).padStart(2, '0');
+      var total = 0;
+      monthlyData.studios.labels.forEach(function(lbl) {
+        total += monthlyData.studios.hours[lbl][mk] || 0;
+      });
+      return [m.name, Math.round(total * 10) / 10];
+    });
+    dashboard.getRange(DASH_DATA_ROW + 1, mCol, n, 2).setValues(mRows);
+  }
+
+  // ── Weekly totals (from daily usage sheet) ──────────────────────────
+  var wCol    = DASH_SUM_WEEKLY_COL;
+  var wkRows  = _getWeeklyHoursRows_();
+  var wn      = wkRows.length;
+
+  dashboard.getRange(DASH_DATA_ROW, wCol, 1, 2)
+    .setValues([['Week (w/c)', 'Total Hours']]).setFontWeight('bold');
+  dashboard.getRange(DASH_DATA_ROW + 1, wCol,     DASH_SUM_MAX_WEEKS, 1).setNumberFormat('@');
+  dashboard.getRange(DASH_DATA_ROW + 1, wCol + 1, DASH_SUM_MAX_WEEKS, 1).setNumberFormat('0.0');
+  dashboard.getRange(DASH_DATA_ROW + 1, wCol, DASH_SUM_MAX_WEEKS, 2).clearContent();
+
+  if (wn > 0) {
+    dashboard.getRange(DASH_DATA_ROW + 1, wCol, wn, 2).setValues(wkRows);
+  }
+}
+
+/**
+ * Read Studio Usage (Daily), group daily totals by week (Monday = week start).
+ * Returns [[weekLabel, totalHours], ...] sorted oldest → newest.
+ */
+function _getWeeklyHoursRows_() {
+  var ss     = SpreadsheetApp.getActive();
+  var sheet  = ss.getSheetByName('Studio Usage (Daily)');
+  if (!sheet) return [];
+
+  var data = sheet.getDataRange().getDisplayValues();
+  if (data.length < 2) return [];
+
+  // Find all (h) columns, excluding Total
+  var hCols  = [];
+  var header = data[0];
+  for (var c = 1; c < header.length; c++) {
+    var h = String(header[c]).trim();
+    if (h.endsWith('(h)') && h.replace(/\s*\(h\)\s*$/, '').trim().toLowerCase() !== 'total') {
+      hCols.push(c);
+    }
+  }
+
+  var MON_ABBR   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var weekTotals = {};
+  var weekOrder  = [];
+
+  for (var r = 1; r < data.length; r++) {
+    var dateStr = String(data[r][0]).trim();
+    if (!dateStr) continue;
+    var date = new Date(dateStr);
+    if (isNaN(date.getTime())) continue;
+
+    // Find the Monday of this week
+    var dow    = date.getDay();                  // 0=Sun … 6=Sat
+    var toMon  = (dow === 0) ? -6 : 1 - dow;
+    var mon    = new Date(date);
+    mon.setDate(date.getDate() + toMon);
+
+    // Sort key: YYYY-MM-DD of that Monday
+    var sk = mon.getFullYear() + '-'
+           + String(mon.getMonth() + 1).padStart(2, '0') + '-'
+           + String(mon.getDate()).padStart(2, '0');
+
+    var dayTotal = 0;
+    hCols.forEach(function(c) { dayTotal += parseFloat(data[r][c]) || 0; });
+
+    if (!weekTotals[sk]) { weekTotals[sk] = 0; weekOrder.push(sk); }
+    weekTotals[sk] += dayTotal;
+  }
+
+  weekOrder.sort();
+  return weekOrder.map(function(sk) {
+    var d     = new Date(sk);
+    var label = d.getDate() + '-' + MON_ABBR[d.getMonth()] + '-' + String(d.getFullYear()).slice(2);
+    return [label, Math.round(weekTotals[sk] * 10) / 10];
+  });
+}
+
+/**
+ * Insert the two summary COLUMN charts at DASH_SUM_CHART_ROW.
+ * Monthly chart on the left, weekly on the right.
+ */
+function _insertSummaryCharts_(dashboard) {
+  // Monthly totals
+  dashboard.insertChart(
+    dashboard.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(dashboard.getRange(DASH_DATA_ROW, DASH_SUM_MONTHLY_COL, DASH_MAX_MONTHS + 1, 2))
+      .setNumHeaders(1)
+      .setPosition(DASH_SUM_CHART_ROW, DASH_LEFT_CHART_COL, 0, 0)
+      .setOption('title', 'Total Hours per Month')
+      .setOption('titleTextStyle', { fontSize: 13, bold: true })
+      .setOption('height', 350)
+      .setOption('width', 750)
+      .setOption('legend', { position: 'none' })
+      .setOption('colors', ['#1a73e8'])
+      .setOption('vAxis', { title: 'Hours', minValue: 0 })
+      .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
+      .build()
+  );
+
+  // Weekly totals
+  dashboard.insertChart(
+    dashboard.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(dashboard.getRange(DASH_DATA_ROW, DASH_SUM_WEEKLY_COL, DASH_SUM_MAX_WEEKS + 1, 2))
+      .setNumHeaders(1)
+      .setPosition(DASH_SUM_CHART_ROW, DASH_RIGHT_CHART_COL, 0, 0)
+      .setOption('title', 'Total Hours per Week')
+      .setOption('titleTextStyle', { fontSize: 13, bold: true })
+      .setOption('height', 350)
+      .setOption('width', 750)
+      .setOption('legend', { position: 'none' })
+      .setOption('colors', ['#34a853'])
+      .setOption('vAxis', { title: 'Hours', minValue: 0 })
+      .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
+      .build()
+  );
+}
+
+// ── Dead code below (overview charts removed Mar 2026) ──────────────────────
 
 /**
  * Insert a full-width overview COLUMN chart at a fixed row position.

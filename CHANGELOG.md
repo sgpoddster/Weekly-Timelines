@@ -2,6 +2,22 @@
 
 ## 2026-03-15 - Dashboard Refinements
 
+### 32. **Add Summary Charts: Total Hours per Month & per Week** (Commit: TBD)
+- **New charts:** Two simple single-series column charts appended below the individual set/studio charts:
+  1. **Total Hours per Month** — sums all studio hours per month, blue bars
+  2. **Total Hours per Week** — groups daily usage by week (Monday = week start), green bars
+- **One-time setup:** Run `addSummaryCharts()` from the menu (`➕ Add Summary Charts`) — no full dashboard rebuild required
+- **Data updates:** `updateDashboardData()` automatically refreshes both charts' data going forward
+- **Hidden columns:** Monthly totals at cols 68-69, weekly totals at cols 70-71 (300 pre-allocated rows ≈ 6 years of weekly data)
+- **New functions:**
+  - `addSummaryCharts()` — one-shot chart creator, in menu
+  - `_writeSummaryData_()` — writes both hidden data tables; called by `_writeDashboardData_()`
+  - `_getWeeklyHoursRows_()` — reads Studio Usage (Daily), groups by ISO week, returns sorted rows
+  - `_insertSummaryCharts_()` — creates the two charts; also called by `setupDashboard()`
+- **Files Modified:** `Code Timelines - Daily Usage.gs`, `Code Scheduling.gs`
+
+---
+
 ### 31. **Remove Overview Charts; Individual Charts Only** (Commit: TBD)
 - **Change:** Removed the four full-width overview charts (Studio % / Hours, Set % / Hours). Only the individual per-studio and per-set dual-axis charts remain.
 - **Why:** Overview charts not needed — individual breakdowns are sufficient.
