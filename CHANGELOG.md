@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-03-15 - Persistent Dashboard Architecture
+
+### Summary
+Major dashboard redesign: charts are now permanent and never rebuilt during routine data updates. Manual chart customisations (data labels, colours, etc.) survive indefinitely. The monthly trigger now only refreshes data, leaving all chart settings intact.
+
+---
+
+### 30. **Persistent Dashboard — Charts Never Rebuilt on Data Update** (Commit: 1c47641)
+- **Problem:** `updateDashboard()` deleted and recreated all charts on every run, resetting any manual customisations (e.g. data labels the user had turned on) each time
+- **Solution:** Split dashboard into two functions with distinct responsibilities:
+  - `setupDashboard()` — one-time full rebuild, **script-editor only** (not in menu). Wipes and recreates all charts. Run once to set up; set data labels manually on each chart (right-click → Edit chart → Customise → Series → Data labels). Labels persist permanently.
+  - `updateDashboardData()` — lightweight data refresh, **in menu**. Rewrites hidden data tables only; never touches charts. Charts auto-refresh via Google Sheets' native data-binding.
+- **New Architecture — Hidden Data Tables:**
+  All data lives in pre-allocated hidden columns (cols 18–91), off the visible dashboard area. Charts reference these fixed ranges (header + 60 pre-allocated rows = 5 years of headroom). Row positions never shift, so no chart range updates are needed after setup.
+  ```
+  Cols 18-23   Overview Studio %      (Month + Studio 1/2/3/4/Other)
+  Cols 24-29   Overview Studio Hours  (same structure)
+  Cols 30-37   Overview Set %         (Month + Iris/Club/Nest/Exec/Nova/Soho/Other)
+  Cols 38-45   Overview Set Hours     (same structure)
+  Cols 46-65   Individual studio charts  (Studio 1-4, 5 cols each)
+  Cols 66-91   Individual set charts     (Iris/Club/Nest/Exec/Nova/Soho, 5 cols each)
+  ```
+- **Fixed Visual Layout:**
+  Chart positions are derived from named constants (e.g. `DASH_OV_S_PCT_CHART_ROW = 5`) so the layout is deterministic regardless of how many months of data exist.
+- **New / Renamed Functions:**
+  - `setupDashboard()` — replaces `updateDashboard()` (full rebuild, hidden from menu)
+  - `updateDashboardData()` — new lightweight data-only update (in menu)
+  - `_writeDashboardData_()` — shared helper writing all hidden data tables
+  - `_writeOverviewBlock_()` — writes one multi-series overview data block
+  - `_writeIndivBlock_()` — writes individual chart data (5 cols per label)
+  - `_insertOverviewChart_()` — replaces `_createTrendBlock_()` (chart creation only)
+  - `_insertIndivCharts_()` — replaces `_createIndividualCharts_()` (chart creation only)
+  - `DASH_*` constants — 20+ layout constants defining columns, rows, sizes
+- **Removed Functions:** `_createTrendBlock_()`, `_createIndividualCharts_()` (stubs left to prevent trigger errors)
+- **Menu Change:** `📈 Update Dashboard` → `📊 Update Dashboard Data` (calls `updateDashboardData`)
+- **Trigger:** `installDashboardTrigger()` now installs `updateDashboardData` (not `setupDashboard`)
+- **Files Modified:** `Code Timelines - Daily Usage.gs`, `Code Scheduling.gs`
+
+---
+
 ## 2026-03-12 - Project Consolidation & Critical Bug Fixes
 
 ### Summary

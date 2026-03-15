@@ -37,17 +37,19 @@ This project combines multiple feature modules into a single Google Apps Script 
 **Purpose:** Track and visualize studio/set usage over time
 
 **Key Functions:**
-- `backfillDailyStudioUsage()` - Populate historical studio data
-- `backfillDailySetUsage()` - Populate historical set data
+- `backfillDailyStudioUsage()` - Populate historical studio data (supports MM/YYYY for past years)
+- `backfillDailySetUsage()` - Populate historical set data (supports MM/YYYY for past years)
 - `deduplicateDailyUsageSheets()` - Remove duplicate date rows from both daily usage sheets
 - `showMonthlyStudioSummary()` - Monthly studio report
-- `updateDashboard()` - Generate usage trend charts
-- `installDashboardTrigger()` - Schedule monthly updates
+- `setupDashboard()` - **Script editor only** — full one-time chart rebuild
+- `updateDashboardData()` - **Menu / trigger** — lightweight data refresh; charts auto-update, preserving all manual settings
+- `installDashboardTrigger()` - Schedule monthly `updateDashboardData` on 1st at 6am
 
-**Charts:**
-- Studio Usage Trends (last 6 months)
-- Set Usage Trends (last 6 months)
-- Current Month Comparison
+**Dashboard Charts (persistent — not recreated on data update):**
+- Overview Studio % and Hours — full-width column charts (Oct 2025 → present)
+- Overview Set % and Hours — full-width column charts
+- Individual dual-axis charts per studio (Studio 1-4): Hours left axis, % of total right axis
+- Individual dual-axis charts per set (Iris, Club, Nest, Exec, Nova, Soho): same
 
 **Original Project:** SG Weekly Timelines (dashboard feature added Feb 2025)
 
@@ -119,7 +121,7 @@ Helper Functions
 Triggers
   ├── Hourly: scheduledAutoConverter() [Photo Helpers.gs]
   ├── Daily 2am: autoUpdateYesterdayData() [Code Timelines - Daily Usage.gs]
-  ├── Monthly 1st 6am: updateDashboard() [Code Timelines - Daily Usage.gs]
+  ├── Monthly 1st 6am: updateDashboardData() [Code Timelines - Daily Usage.gs]
   └── Monthly 2nd 6am: sendMonthlySummaryEmail() [Code Timelines - Daily Usage.gs]
 ```
 

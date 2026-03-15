@@ -64,7 +64,8 @@ SG Weekly Timelines/
 │  │  • backfillDailyStudioUsage/Set() — Populate historical data      │ │
 │  │  • deduplicateDailyUsageSheets() — Fix duplicate rows             │ │
 │  │  • showMonthlyStudioSummary/Set() — Usage popup dialogs           │ │
-│  │  • updateDashboard() — Rebuild charts dashboard                   │ │
+│  │  • setupDashboard() — One-time chart creation (script editor only) │ │
+│  │  • updateDashboardData() — Monthly data refresh (menu)            │ │
 │  │  • sendMonthlySummaryEmail() — Monthly email report               │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
@@ -102,10 +103,12 @@ SG Weekly Timelines/
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ Dashboard Sheet (Auto-updated monthly)                          │   │
-│  │ • Studio Usage Trends — 6 month % chart with consistent colors  │   │
-│  │ • Set Usage Trends — 6 month % chart with consistent colors     │   │
-│  │ • Current Month Comparison — Hours bar chart                    │   │
+│  │ Dashboard Sheet (data refreshed monthly, charts permanent)      │   │
+│  │ • Overview: Studio % and Hours — full-width column charts       │   │
+│  │ • Overview: Set % and Hours — full-width column charts          │   │
+│  │ • Individual: one dual-axis chart per studio (excl. Other)      │   │
+│  │ • Individual: one dual-axis chart per set   (excl. Other)       │   │
+│  │ • Hidden data tables in cols 18-91 (pre-allocated 60 months)    │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                          │
@@ -114,7 +117,7 @@ SG Weekly Timelines/
 │                    Time-Based Triggers                                  │
 │  • Hourly: scheduledAutoConverter() — ARW to JPG processing             │
 │  • Daily 2am: autoUpdateYesterdayData() — Update previous day           │
-│  • Monthly 1st at 6am: updateDashboard() — Rebuild charts               │
+│  • Monthly 1st at 6am: updateDashboardData() — Refresh chart data        │
 │  • Monthly 2nd at 6am: sendMonthlySummaryEmail() — Send report          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -744,115 +747,81 @@ function _countWorkingDays_(startDate, endDate)
 
 **File**: `Code Timelines - Daily Usage.gs`
 
-The dashboard system provides visual analytics with charts showing usage trends over time.
+The dashboard provides persistent visual analytics. Charts are created once and survive indefinitely — only the underlying data tables are rewritten on each monthly refresh.
 
-**Purpose**: Create visual representations of studio/set usage trends for easy analysis and comparison.
+##### Two-function design
 
-**Functions**:
-- `updateDashboard()` - Main function to rebuild dashboard
-- `installDashboardTrigger()` - Install trigger for 1st of month at 6am
+| Function | When to run | What it does |
+|---|---|---|
+| `setupDashboard()` | Once (script editor only) | Full rebuild: deletes all charts, rewrites layout, creates new charts. Run when first setting up or after a major chart reset. |
+| `updateDashboardData()` | Monthly (menu / trigger) | Rewrites hidden data tables only. Charts auto-refresh. All manual settings (data labels, etc.) are preserved. |
 
-**Chart Types**:
+After running `setupDashboard()`, enable data labels on each individual chart once:
+> Right-click chart → Edit chart → Customise → Series → tick **Data labels**
 
-1. **Studio Usage Trends** (Grouped Column Chart)
-   - Shows percentage of total hours for each studio
-   - Last 6 complete months
-   - Grouped bars allow month-to-month comparison
-   - Consistent colors: Studio 1 (Green), Studio 2 (Blue), Studio 3 (Yellow), Studio 4 (Red)
+Labels persist through all future `updateDashboardData()` calls.
 
-2. **Set Usage Trends** (Grouped Column Chart)
-   - Shows percentage of total hours for each set
-   - Last 6 complete months
-   - Grouped bars for easy trend spotting
-   - Consistent colors: Iris (Purple), Club (Cyan), Nest (Green), Exec (Orange), Nova (Red), Soho (Indigo)
+##### Hidden data table layout
 
-3. **Current Month Studio Comparison** (Column Chart)
-   - Total hours comparison across studios
-   - Last complete month only
-   - Quick snapshot of current studio utilization
+All data lives in pre-allocated hidden columns (cols 18-91), keeping the visible area chart-only. Each table has a fixed header row plus `DASH_MAX_MONTHS = 60` pre-allocated data rows (5 years of headroom). Because the range never changes, chart ranges never need updating.
 
-**Data Aggregation Process**:
 ```
-1. Determine last 6 complete months (current month - 1 to current month - 6)
+Cols 18-23   Overview Studio %      (Month + Studio 1/2/3/4/Other)
+Cols 24-29   Overview Studio Hours  (same structure)
+Cols 30-37   Overview Set %         (Month + Iris/Club/Nest/Exec/Nova/Soho/Other)
+Cols 38-45   Overview Set Hours     (same structure)
+Cols 46-65   Individual studio charts  (Studio 1, Studio 2, Studio 3, Studio 4 — 5 cols each)
+Cols 66-91   Individual set charts     (Iris, Club, Nest, Exec, Nova, Soho — 5 cols each)
+```
+
+Each individual chart's 5-column block: `Month | Hours | HoursLabel | Pct | PctLabel`
+
+##### Fixed visual layout
+
+Chart positions are derived from named constants so the layout never shifts:
+
+```
+Row 4   Section header: Studio Overview
+Row 5   Overview Studio % chart        (380px tall, full width)
+Row 29  Overview Studio Hours chart
+Row 53  Section header: Set Overview
+Row 54  Overview Set % chart
+Row 78  Overview Set Hours chart
+Row 102 Section header: Individual Studios
+Row 103 Studio 1 (col A) | Studio 2 (col I)
+Row 135 Studio 3 (col A) | Studio 4 (col I)
+Row 167 Section header: Individual Sets
+Row 168 Iris (col A) | Club (col I)   (550px tall)
+Row 200 Nest (col A) | Exec (col I)
+Row 232 Nova (col A) | Soho (col I)
+```
+
+##### Data aggregation (`_getMonthlyAggregatedData_`)
+
+```
+1. Build month list: Oct 2025 → last completed month
 2. Read Studio Usage (Daily) and Set Usage (Daily) sheets
-3. Parse header to find hour columns (exclude count and total columns)
-4. FOR each date row:
-     Extract date, determine month
-     Accumulate hours by studio/set for that month
-5. Calculate percentages per month:
-     FOR each month:
-       total = sum of all studio/set hours
-       FOR each studio/set:
-         percentage = (hours / total) * 100
-6. Write aggregated data to Dashboard sheet
-7. Create charts using Google Charts API
+3. Parse header to find "(h)" columns → studio/set labels
+4. FOR each date row: accumulate hours by label by month key (YYYY-MM)
+5. FOR each month: calculate % = (label_hours / total_hours) × 100
+6. Return { studios, sets, months }
 ```
 
-**Chart Creation** (`_createStudioTrendsChart_`, `_createSetTrendsChart_`):
+##### Color Consistency
+
+Studio Colors (`_getStudioColors_()`):
 ```javascript
-// Write data range to sheet
-sheet.getRange(row, col, rows, cols).setValues(data);
-
-// Create chart
-const chart = sheet.newChart()
-  .setChartType(Charts.ChartType.COLUMN)
-  .addRange(dataRange)
-  .setPosition(row, col, offsetX, offsetY)
-  .setOption('title', 'Studio Usage Trends (% of Total Hours)')
-  .setOption('isStacked', false)
-  .setOption('colors', colorArray)
-  .build();
-
-sheet.insertChart(chart);
+{ 'Studio 1': '#34a853', 'Studio 2': '#4285f4', 'Studio 3': '#fbbc04', 'Studio 4': '#ea4335', 'Other': '#9e9e9e' }
 ```
 
-**Color Consistency**:
-
-Studio Colors (defined in `_getStudioColors_()`):
+Set Colors (`_getSetColors_()`):
 ```javascript
-{
-  'Studio 1': '#34a853',  // Green
-  'Studio 2': '#4285f4',  // Blue
-  'Studio 3': '#fbbc04',  // Yellow
-  'Studio 4': '#ea4335',  // Red
-  'Other': '#9e9e9e'      // Gray
-}
+{ 'Iris': '#9c27b0', 'Club': '#00bcd4', 'Nest': '#4caf50', 'Exec': '#ff9800', 'Nova': '#f44336', 'Soho': '#3f51b5', 'Other': '#9e9e9e' }
 ```
 
-Set Colors (defined in `_getSetColors_()`):
-```javascript
-{
-  'Iris': '#9c27b0',     // Purple
-  'Club': '#00bcd4',     // Cyan
-  'Nest': '#4caf50',     // Green
-  'Exec': '#ff9800',     // Orange
-  'Nova': '#f44336',     // Red
-  'Soho': '#3f51b5',     // Indigo
-  'Other': '#9e9e9e'     // Gray
-}
-```
+Individual charts use a lighter shade of each label's color for the % bar (`_lightenColor_(hex, 0.45)`).
 
-**Why Consistent Colors?**
-- Same studio/set always appears in same color across all charts
-- Easy to track trends visually across multiple months
-- Reduces cognitive load when comparing data
-- Professional, polished appearance
-
-**Dashboard Layout**:
-```
-Row 1-2: Title and last updated timestamp
-Row 4-14: Studio trends chart data and chart
-Row 20-30: Set trends chart data and chart
-Row 36-46: Current month comparison data and chart
-```
-
-**Performance**:
-- Reads from Daily Usage sheets (pre-aggregated data)
-- No timeline re-parsing required
-- Generates dashboard in <5 seconds
-- Charts update automatically on 1st of month
-
-**Trigger**: 1st of each month at 6am
+**Trigger**: 1st of each month at 6am — calls `updateDashboardData()` only
 
 ## Design Patterns
 
