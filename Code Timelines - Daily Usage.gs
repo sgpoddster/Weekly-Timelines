@@ -720,14 +720,20 @@ function _createIndividualCharts_(sheet, months, data, startRow, colors, labels)
       .setValues([['Month', label, '']])
       .setFontWeight('bold');
 
-    // Force month column to plain text so Sheets doesn't parse dates
+    // Force month column to plain text so Sheets doesn't parse dates.
+    // Force annotation column to text BEFORE writing — otherwise Sheets
+    // coerces "69.0" → 69.0 (number) and the chart plots it as a second
+    // data series instead of using it as a bar label.
     sheet.getRange(tableRow + 1, tableCol, n, 1).setNumberFormat('@');
+    sheet.getRange(tableRow + 1, tableCol + 2, n, 1).setNumberFormat('@');
 
-    // Data rows: [month-label, hours-number, "X.X" annotation string]
+    // Data rows: [month-label, hours-number, "X.Xh" annotation string]
+    // The 'h' suffix is a second guard so Sheets can never parse the
+    // annotation as a number even if the format slips back to Automatic.
     var rows = months.map(function(m) {
       var mk  = m.year + '-' + String(m.month).padStart(2, '0');
       var val = Math.round((data.hours[label][mk] || 0) * 10) / 10;
-      return [m.name, val, val.toFixed(1)];
+      return [m.name, val, val.toFixed(1) + 'h'];
     });
     sheet.getRange(tableRow + 1, tableCol, n, 3).setValues(rows);
     sheet.getRange(tableRow + 1, tableCol + 1, n, 1).setNumberFormat('0.0');
