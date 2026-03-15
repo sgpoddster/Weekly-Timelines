@@ -708,45 +708,42 @@ function _createIndividualCharts_(sheet, months, data, startRow, colors, labels)
     var tableRow = isLeft ? leftRow : rightRow;
     var tableCol = isLeft ? LEFT_COL : RIGHT_COL;
 
-    // ------------------------------------------------------------------
-    // Data table: 3 columns — Month (text) | Hours (num) | Annotation (str)
-    // Google Charts treats a string column immediately after a number column
-    // in the same range as an annotation → value appears above the bar.
-    // ------------------------------------------------------------------
     var labelColor = colors[idx] || '#4285f4';
 
-    // Header row (annotation header = '' so no legend entry for it)
-    sheet.getRange(tableRow, tableCol, 1, 3)
-      .setValues([['Month', label, '']])
+    // ------------------------------------------------------------------
+    // Data table: 2 columns only — Month (text) | Hours (num)
+    // We do NOT use an annotation column. Instead we use the series-level
+    // 'annotations' option which maps to the chart editor's "Data labels"
+    // checkbox and reads directly from the series values.
+    // ------------------------------------------------------------------
+
+    // Header row
+    sheet.getRange(tableRow, tableCol, 1, 2)
+      .setValues([['Month', label]])
       .setFontWeight('bold');
 
-    // Force month column to plain text so Sheets doesn't parse dates.
-    // Force annotation column to text BEFORE writing — otherwise Sheets
-    // coerces "69.0" → 69.0 (number) and the chart plots it as a second
-    // data series instead of using it as a bar label.
+    // Force month column to plain text so Sheets doesn't parse dates
     sheet.getRange(tableRow + 1, tableCol, n, 1).setNumberFormat('@');
-    sheet.getRange(tableRow + 1, tableCol + 2, n, 1).setNumberFormat('@');
 
-    // Data rows: [month-label, hours-number, "X.Xh" annotation string]
-    // The 'h' suffix is a second guard so Sheets can never parse the
-    // annotation as a number even if the format slips back to Automatic.
+    // Data rows: [month-label, hours-number]
     var rows = months.map(function(m) {
       var mk  = m.year + '-' + String(m.month).padStart(2, '0');
       var val = Math.round((data.hours[label][mk] || 0) * 10) / 10;
-      return [m.name, val, val.toFixed(1) + 'h'];
+      return [m.name, val];
     });
-    sheet.getRange(tableRow + 1, tableCol, n, 3).setValues(rows);
+    sheet.getRange(tableRow + 1, tableCol, n, 2).setValues(rows);
     sheet.getRange(tableRow + 1, tableCol + 1, n, 1).setNumberFormat('0.0');
 
     // ------------------------------------------------------------------
-    // Column chart using the full 3-column range
+    // Column chart — series[0].annotations enables the "Data labels"
+    // feature (same as the chart editor checkbox) so values appear above bars
     // ------------------------------------------------------------------
     var chartRow  = tableRow + DATA_ROWS + 1;
-    var fullRange = sheet.getRange(tableRow, tableCol, DATA_ROWS, 3);
+    var dataRange = sheet.getRange(tableRow, tableCol, DATA_ROWS, 2);
 
     var chart = sheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
-      .addRange(fullRange)
+      .addRange(dataRange)
       .setNumHeaders(1)
       .setPosition(chartRow, tableCol, 0, 0)
       .setOption('title', label + ' — Hours per Month')
@@ -757,10 +754,14 @@ function _createIndividualCharts_(sheet, months, data, startRow, colors, labels)
       .setOption('colors', [labelColor])
       .setOption('vAxis', { title: 'Hours', minValue: 0 })
       .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
-      .setOption('annotations', {
-        alwaysOutside: false,
-        textStyle: { fontSize: 10, bold: true, color: '#333333' },
-        stem: { color: 'transparent' }
+      .setOption('series', {
+        0: {
+          annotations: {
+            alwaysOutside: true,
+            textStyle: { fontSize: 11, bold: true, color: '#333333', auraColor: 'none' },
+            stem: { color: 'transparent', length: 4 }
+          }
+        }
       })
       .build();
 
