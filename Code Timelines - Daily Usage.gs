@@ -700,79 +700,99 @@ function _lightenColor_(hex, factor) {
 /**
  * Create one dual-series COLUMN chart per label in a 2-column grid.
  * Each month shows TWO bars: Hours (left axis) + % of total (right axis).
- * Values are labelled above each bar.
+ * Data labels (e.g. "12.5h", "33.5%") appear above each bar automatically
+ * via annotation columns in the data table.
+ *
+ * Data tables are written to far-right hidden columns (off visible area)
+ * so only the charts appear on the dashboard.
+ *
  * Returns the next available row after all charts.
  */
 function _createIndividualCharts_(sheet, months, data, startRow, colors, labels) {
   if (!labels || labels.length === 0) return startRow;
 
   var n          = months.length;
-  var DATA_ROWS  = n + 1;       // header + one row per month
-  var CHART_ROWS = 22;
-  var GAP        = 2;
-  var ROW_BLOCK  = DATA_ROWS + 1 + CHART_ROWS + GAP;
+  var DATA_ROWS  = n + 1;   // header + one row per month (for range ref only)
+  var CHART_ROWS = 38;      // rows a 550px-tall chart occupies (~21px/row)
+  var GAP        = 1;
+  var ROW_BLOCK  = CHART_ROWS + GAP;  // no visible data table rows in the block
 
-  var LEFT_COL  = 1;
-  var RIGHT_COL = 8;  // cols 8-10 for right-hand tables
+  // Chart anchor columns (1-based)
+  var LEFT_CHART_COL  = 1;
+  var RIGHT_CHART_COL = 9;
+
+  // Hidden data columns (far right, off visible dashboard area)
+  // 5 columns each: Month | Hours | HoursLabel | Pct | PctLabel
+  var LEFT_DATA_COL  = 18;
+  var RIGHT_DATA_COL = 24;
 
   var leftRow  = startRow;
   var rightRow = startRow;
 
   labels.forEach(function(label, idx) {
     var isLeft   = (idx % 2 === 0);
-    var tableRow = isLeft ? leftRow : rightRow;
-    var tableCol = isLeft ? LEFT_COL : RIGHT_COL;
+    var chartRow = isLeft ? leftRow  : rightRow;
+    var chartCol = isLeft ? LEFT_CHART_COL  : RIGHT_CHART_COL;
+    var dataRow  = isLeft ? leftRow  : rightRow;
+    var dataCol  = isLeft ? LEFT_DATA_COL   : RIGHT_DATA_COL;
 
-    var solidColor  = colors[idx] || '#4285f4';
-    var lightColor  = _lightenColor_(solidColor, 0.45);  // lighter shade for % bars
+    var solidColor = colors[idx] || '#4285f4';
+    var lightColor = _lightenColor_(solidColor, 0.45);
 
     // ------------------------------------------------------------------
-    // Data table: Month | Hours | %
+    // Data table (5 cols, hidden far right):
+    //   Month | Hours | "X.Xh" | % | "X.X%"
+    //
+    // The string columns immediately following each numeric column are
+    // treated by Google Charts as annotation (data label) columns —
+    // labels appear above bars automatically, no manual steps needed.
     // ------------------------------------------------------------------
-    sheet.getRange(tableRow, tableCol, 1, 3)
-      .setValues([['Month', 'Hours', '%']])
+    sheet.getRange(dataRow, dataCol, 1, 5)
+      .setValues([['Month', 'Hours', 'HoursLabel', 'Pct', 'PctLabel']])
       .setFontWeight('bold');
 
-    // Month column as plain text so Sheets doesn't parse as dates
-    sheet.getRange(tableRow + 1, tableCol, n, 1).setNumberFormat('@');
+    // Force text format BEFORE writing so Sheets doesn't coerce strings to numbers
+    sheet.getRange(dataRow + 1, dataCol,     n, 1).setNumberFormat('@');   // Month
+    sheet.getRange(dataRow + 1, dataCol + 1, n, 1).setNumberFormat('0.0'); // Hours
+    sheet.getRange(dataRow + 1, dataCol + 2, n, 1).setNumberFormat('@');   // HoursLabel
+    sheet.getRange(dataRow + 1, dataCol + 3, n, 1).setNumberFormat('0.0'); // Pct
+    sheet.getRange(dataRow + 1, dataCol + 4, n, 1).setNumberFormat('@');   // PctLabel
 
     var rows = months.map(function(m) {
       var mk  = m.year + '-' + String(m.month).padStart(2, '0');
       var hrs = Math.round((data.hours[label][mk]       || 0) * 10) / 10;
       var pct = Math.round((data.percentages[label][mk] || 0) * 10) / 10;
-      return [m.name, hrs, pct];
+      return [m.name, hrs, hrs + 'h', pct, pct + '%'];
     });
-    sheet.getRange(tableRow + 1, tableCol, n, 3).setValues(rows);
-    sheet.getRange(tableRow + 1, tableCol + 1, n, 2).setNumberFormat('0.0');
+    sheet.getRange(dataRow + 1, dataCol, n, 5).setValues(rows);
 
     // ------------------------------------------------------------------
-    // Dual-axis grouped column chart
-    //   Series 0 (Hours) → left Y-axis
-    //   Series 1 (%)     → right Y-axis (0–100)
+    // Dual-axis grouped COLUMN chart
+    //   Series 0 (Hours)       → left  Y-axis, auto-labelled from col 3
+    //   Series 1 (% of total)  → right Y-axis, auto-labelled from col 5
     // ------------------------------------------------------------------
-    var chartRow  = tableRow + DATA_ROWS + 1;
-    var dataRange = sheet.getRange(tableRow, tableCol, DATA_ROWS, 3);
-
-    var annotStyle = {
-      alwaysOutside: true,
-      textStyle: { fontSize: 10, bold: true, color: '#333333', auraColor: 'none' },
-      stem: { color: 'transparent', length: 4 }
-    };
+    var dataRange = sheet.getRange(dataRow, dataCol, DATA_ROWS, 5);
 
     var chart = sheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
       .addRange(dataRange)
       .setNumHeaders(1)
-      .setPosition(chartRow, tableCol, 0, 0)
+      .setPosition(chartRow, chartCol, 0, 0)
       .setOption('title', label + ' — Hours & % of Total')
-      .setOption('titleTextStyle', { fontSize: 12, bold: true, color: solidColor })
-      .setOption('height', 320)
-      .setOption('width', 480)
+      .setOption('titleTextStyle', { fontSize: 13, bold: true, color: solidColor })
+      .setOption('height', 550)
+      .setOption('width', 800)
       .setOption('legend', { position: 'bottom' })
       .setOption('colors', [solidColor, lightColor])
+      // Chart-level annotation styling applies to all annotation columns
+      .setOption('annotations', {
+        alwaysOutside: true,
+        textStyle: { fontSize: 10, bold: true, color: '#333333', auraColor: 'none' },
+        stem: { color: 'transparent', length: 4 }
+      })
       .setOption('series', {
-        0: { targetAxisIndex: 0, annotations: annotStyle },
-        1: { targetAxisIndex: 1, annotations: annotStyle }
+        0: { targetAxisIndex: 0 },
+        1: { targetAxisIndex: 1 }
       })
       .setOption('vAxes', {
         0: { title: 'Hours', minValue: 0 },
