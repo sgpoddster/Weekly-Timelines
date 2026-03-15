@@ -1248,6 +1248,19 @@ function autoUpdateYesterdayData() {
 
     Logger.log('Auto-updated daily usage for ' + stats.dateLabel);
   }
+
+  // Refresh dashboard data every night so weekly/monthly charts stay current.
+  // Runs silently (no UI alert) since this is a background trigger.
+  var dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
+  if (dashboard) {
+    try {
+      var monthlyData = _getMonthlyAggregatedData_();
+      _writeDashboardData_(dashboard, monthlyData);
+      Logger.log('Dashboard data refreshed by daily trigger.');
+    } catch (e) {
+      Logger.log('Dashboard refresh skipped: ' + e.message);
+    }
+  }
 }
 
 
