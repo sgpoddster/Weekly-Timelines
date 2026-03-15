@@ -432,6 +432,8 @@ function updateDashboard() {
   if (!dashboard) {
     dashboard = ss.insertSheet('Dashboard');
   } else {
+    // Remove all existing charts before clearing data
+    dashboard.getCharts().forEach(function(c) { dashboard.removeChart(c); });
     dashboard.clear();
   }
 
@@ -446,19 +448,40 @@ function updateDashboard() {
   // Build monthly aggregation data
   const monthlyData = _getMonthlyAggregatedData_();
 
-  // Create charts
-  _createStudioTrendsChart_(dashboard, monthlyData.studios, 4);
-  _createSetTrendsChart_(dashboard, monthlyData.sets, 20);
-  _createCurrentMonthComparisonChart_(dashboard, monthlyData, 36);
+  const months = monthlyData.months;
+
+  // Layout: each chart block = data table (numMonths+1 rows) + 1 spacer + chart (20 rows) + 2 spacers
+  // Row anchors (1-based): title=1, subtitle=2, gap=3
+  // Studios % : data at row 4,  chart at row 4+numMonths+2
+  // Studios h : data at row 4+numMonths+2+20+2, chart after that
+  // Sets %    : ...
+  // Sets h    : ...
+  const n = months.length; // number of months
+  const BLOCK = n + 1 + 2 + 20 + 2; // data rows + spacer + chart rows + spacer
+
+  const R_STUDIO_PCT  = 4;
+  const R_STUDIO_H    = R_STUDIO_PCT  + BLOCK;
+  const R_SET_PCT     = R_STUDIO_H    + BLOCK;
+  const R_SET_H       = R_SET_PCT     + BLOCK;
+
+  _createTrendBlock_(dashboard, months, monthlyData.studios, R_STUDIO_PCT,
+    'Studio Usage — % of Total Hours', 'pct', _getStudioColors_(monthlyData.studios.labels));
+  _createTrendBlock_(dashboard, months, monthlyData.studios, R_STUDIO_H,
+    'Studio Usage — Hours per Month',  'h',   _getStudioColors_(monthlyData.studios.labels));
+  _createTrendBlock_(dashboard, months, monthlyData.sets, R_SET_PCT,
+    'Set Usage — % of Total Hours',    'pct', _getSetColors_(monthlyData.sets.labels));
+  _createTrendBlock_(dashboard, months, monthlyData.sets, R_SET_H,
+    'Set Usage — Hours per Month',     'h',   _getSetColors_(monthlyData.sets.labels));
 
   SpreadsheetApp.getUi().alert('Dashboard updated successfully!');
 }
 
 /**
  * Get monthly aggregated data from Daily Usage sheets
- * Returns last 6 months of data
+ * Returns last N months of data (default 12)
  */
-function _getMonthlyAggregatedData_() {
+function _getMonthlyAggregatedData_(numMonths) {
+  numMonths = numMonths || 12;
   const ss = SpreadsheetApp.getActive();
   const studioSheet = ss.getSheetByName('Studio Usage (Daily)');
   const setSheet = ss.getSheetByName('Set Usage (Daily)');
@@ -467,254 +490,160 @@ function _getMonthlyAggregatedData_() {
     throw new Error('Daily Usage sheets not found. Please run backfill first.');
   }
 
-  // Get last 6 complete months
+  // Get last N complete months
   const now = new Date();
   const months = [];
-  for (let i = 1; i <= 6; i++) {
+  for (let i = numMonths; i >= 1; i--) {
     const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.unshift({
+    months.push({
       date: monthDate,
-      name: monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      // Use a format that Sheets will NOT auto-convert to a date, e.g. "Sep-2025"
+      name: monthDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', '-'),
       year: monthDate.getFullYear(),
       month: monthDate.getMonth()
     });
   }
 
-  // Aggregate studio data by month
-  const studios = _aggregateByMonth_(studioSheet, months, 'studio');
-
-  // Aggregate set data by month
-  const sets = _aggregateByMonth_(setSheet, months, 'set');
+  const studios = _aggregateByMonth_(studioSheet, months);
+  const sets    = _aggregateByMonth_(setSheet,    months);
 
   return { studios, sets, months };
 }
 
 /**
- * Aggregate usage data by month
+ * Aggregate usage data by month from a Daily Usage sheet.
+ * Header format: Date | Label (h) | Label (%) | Label (#) | ...
  */
-function _aggregateByMonth_(sheet, months, type) {
+function _aggregateByMonth_(sheet, months) {
   const data = sheet.getDataRange().getDisplayValues();
-  if (data.length < 2) return {};
+  if (data.length < 2) return { labels: [], percentages: {}, hours: {} };
 
   const header = data[0];
-  const dateCol = 0;
 
-  // Find hour columns (exclude count columns and totals)
+  // Find "(h)" columns — these hold the hours values
   const labels = [];
   const colMap = {};
   for (let c = 1; c < header.length; c++) {
     const h = String(header[c]).trim();
-    if (h.endsWith('Hours')) {
-      const label = h.replace(/\s*Hours\s*$/, '').trim();
-      if (label !== 'Total') {
+    if (h.endsWith('(h)')) {
+      const label = h.replace(/\s*\(h\)\s*$/, '').trim();
+      if (label && label.toLowerCase() !== 'total') {
         labels.push(label);
         colMap[label] = c;
       }
     }
   }
 
-  // Aggregate by month
-  const result = {};
-  labels.forEach(label => {
-    result[label] = {};
-  });
+  // Accumulate raw hours by month key (YYYY-MM)
+  const hours = {};
+  labels.forEach(function(label) { hours[label] = {}; });
 
   for (let r = 1; r < data.length; r++) {
-    const dateStr = String(data[r][dateCol]).trim();
+    const dateStr = String(data[r][0]).trim();
     if (!dateStr) continue;
-
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) continue;
 
-    const monthKey = date.getFullYear() + '-' + String(date.getMonth()).padStart(2, '0');
-
-    labels.forEach(label => {
-      const hours = parseFloat(data[r][colMap[label]]) || 0;
-      if (!result[label][monthKey]) {
-        result[label][monthKey] = 0;
-      }
-      result[label][monthKey] += hours;
+    const mk = date.getFullYear() + '-' + String(date.getMonth()).padStart(2, '0');
+    labels.forEach(function(label) {
+      const h = parseFloat(data[r][colMap[label]]) || 0;
+      hours[label][mk] = (hours[label][mk] || 0) + h;
     });
   }
 
   // Calculate percentages per month
   const percentages = {};
-  labels.forEach(label => {
-    percentages[label] = {};
-  });
+  labels.forEach(function(label) { percentages[label] = {}; });
 
-  months.forEach(m => {
-    const monthKey = m.year + '-' + String(m.month).padStart(2, '0');
-    let total = 0;
-    labels.forEach(label => {
-      total += result[label][monthKey] || 0;
-    });
-
+  months.forEach(function(m) {
+    const mk = m.year + '-' + String(m.month).padStart(2, '0');
+    var total = 0;
+    labels.forEach(function(label) { total += hours[label][mk] || 0; });
     if (total > 0) {
-      labels.forEach(label => {
-        const hours = result[label][monthKey] || 0;
-        percentages[label][monthKey] = (hours / total) * 100;
+      labels.forEach(function(label) {
+        percentages[label][mk] = (hours[label][mk] || 0) / total * 100;
       });
     }
   });
 
-  return { labels, percentages, hours: result };
+  return { labels: labels, percentages: percentages, hours: hours };
 }
 
 /**
- * Create studio trends chart (grouped bar chart)
+ * Write a data table + chart for one trend block.
+ *
+ * @param {Sheet}  sheet    - Dashboard sheet
+ * @param {Array}  months   - Array of month objects from _getMonthlyAggregatedData_
+ * @param {Object} data     - { labels, percentages, hours } from _aggregateByMonth_
+ * @param {number} startRow - 1-based row where the data table starts
+ * @param {string} title    - Chart title
+ * @param {string} metric   - 'pct' for percentage, 'h' for hours
+ * @param {Array}  colors   - Array of hex colour strings
  */
-function _createStudioTrendsChart_(sheet, studioData, startRow) {
-  const ss = SpreadsheetApp.getActive();
-  const { labels, percentages } = studioData;
+function _createTrendBlock_(sheet, months, data, startRow, title, metric, colors) {
+  var labels = data.labels;
+  if (!labels || labels.length === 0) return;
 
-  // Get months
-  const now = new Date();
-  const months = [];
-  for (let i = 1; i <= 6; i++) {
-    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.unshift(monthDate);
-  }
+  var numCols = labels.length + 1; // Month col + one col per label
+  var numRows = months.length + 1; // Header row + one row per month
 
-  // Write data to sheet for chart
-  const dataStartRow = startRow;
-  const dataStartCol = 1;
+  // ------------------------------------------------------------------
+  // 1. Write header row
+  // ------------------------------------------------------------------
+  var headerVals = [['Month'].concat(labels)];
+  sheet.getRange(startRow, 1, 1, numCols).setValues(headerVals).setFontWeight('bold');
 
-  // Header row
-  sheet.getRange(dataStartRow, dataStartCol).setValue('Month');
-  labels.forEach((label, i) => {
-    sheet.getRange(dataStartRow, dataStartCol + 1 + i).setValue(label);
-  });
+  // ------------------------------------------------------------------
+  // 2. Force month column to TEXT so Sheets doesn't parse it as a date
+  // ------------------------------------------------------------------
+  sheet.getRange(startRow + 1, 1, months.length, 1).setNumberFormat('@');
 
-  // Data rows
-  months.forEach((monthDate, r) => {
-    const monthKey = monthDate.getFullYear() + '-' + String(monthDate.getMonth()).padStart(2, '0');
-    const monthName = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-
-    sheet.getRange(dataStartRow + 1 + r, dataStartCol).setValue(monthName);
-    labels.forEach((label, c) => {
-      const pct = percentages[label][monthKey] || 0;
-      sheet.getRange(dataStartRow + 1 + r, dataStartCol + 1 + c).setValue(pct);
+  // ------------------------------------------------------------------
+  // 3. Write data rows
+  // ------------------------------------------------------------------
+  var dataRows = months.map(function(m) {
+    var mk = m.year + '-' + String(m.month).padStart(2, '0');
+    var row = [m.name];
+    labels.forEach(function(label) {
+      if (metric === 'pct') {
+        row.push(Math.round((data.percentages[label][mk] || 0) * 10) / 10);
+      } else {
+        row.push(Math.round((data.hours[label][mk] || 0) * 100) / 100);
+      }
     });
+    return row;
   });
+  sheet.getRange(startRow + 1, 1, months.length, numCols).setValues(dataRows);
 
-  // Create chart
-  const dataRange = sheet.getRange(dataStartRow, dataStartCol, months.length + 1, labels.length + 1);
+  // Format numeric columns to 1 decimal place
+  sheet.getRange(startRow + 1, 2, months.length, labels.length)
+       .setNumberFormat('0.0');
 
-  const chart = sheet.newChart()
+  // ------------------------------------------------------------------
+  // 4. Create chart from the data table
+  // ------------------------------------------------------------------
+  var tableRange   = sheet.getRange(startRow, 1, numRows, numCols);
+  var chartRow     = startRow + numRows + 1;   // one blank row gap
+  var vAxisOptions = metric === 'pct'
+    ? { title: '% of total hours', minValue: 0, maxValue: 100 }
+    : { title: 'Hours', minValue: 0 };
+
+  var chartBuilder = sheet.newChart()
     .setChartType(Charts.ChartType.COLUMN)
-    .addRange(dataRange)
-    .setPosition(startRow + 10, 1, 0, 0)
-    .setOption('title', 'Studio Usage Trends (% of Total Hours)')
-    .setOption('height', 400)
-    .setOption('width', 800)
+    .addRange(tableRange)
+    .setNumHeaders(1)
+    .setPosition(chartRow, 1, 0, 0)
+    .setOption('title', title)
+    .setOption('titleTextStyle', { fontSize: 14, bold: true })
+    .setOption('height', 380)
+    .setOption('width', 900)
     .setOption('isStacked', false)
     .setOption('legend', { position: 'right' })
-    .setOption('vAxis', { title: 'Percentage (%)', minValue: 0, maxValue: 100 })
-    .setOption('hAxis', { title: 'Month' })
-    .setOption('colors', _getStudioColors_(labels))
-    .build();
+    .setOption('vAxis', vAxisOptions)
+    .setOption('hAxis', { title: 'Month', slantedText: true, slantedTextAngle: 45 })
+    .setOption('colors', colors);
 
-  sheet.insertChart(chart);
-}
-
-/**
- * Create set trends chart (grouped bar chart)
- */
-function _createSetTrendsChart_(sheet, setData, startRow) {
-  const ss = SpreadsheetApp.getActive();
-  const { labels, percentages } = setData;
-
-  // Get months
-  const now = new Date();
-  const months = [];
-  for (let i = 1; i <= 6; i++) {
-    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.unshift(monthDate);
-  }
-
-  // Write data to sheet for chart
-  const dataStartRow = startRow;
-  const dataStartCol = 1;
-
-  // Header row
-  sheet.getRange(dataStartRow, dataStartCol).setValue('Month');
-  labels.forEach((label, i) => {
-    sheet.getRange(dataStartRow, dataStartCol + 1 + i).setValue(label);
-  });
-
-  // Data rows
-  months.forEach((monthDate, r) => {
-    const monthKey = monthDate.getFullYear() + '-' + String(monthDate.getMonth()).padStart(2, '0');
-    const monthName = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-
-    sheet.getRange(dataStartRow + 1 + r, dataStartCol).setValue(monthName);
-    labels.forEach((label, c) => {
-      const pct = percentages[label][monthKey] || 0;
-      sheet.getRange(dataStartRow + 1 + r, dataStartCol + 1 + c).setValue(pct);
-    });
-  });
-
-  // Create chart
-  const dataRange = sheet.getRange(dataStartRow, dataStartCol, months.length + 1, labels.length + 1);
-
-  const chart = sheet.newChart()
-    .setChartType(Charts.ChartType.COLUMN)
-    .addRange(dataRange)
-    .setPosition(startRow + 10, 1, 0, 0)
-    .setOption('title', 'Set Usage Trends (% of Total Hours)')
-    .setOption('height', 400)
-    .setOption('width', 800)
-    .setOption('isStacked', false)
-    .setOption('legend', { position: 'right' })
-    .setOption('vAxis', { title: 'Percentage (%)', minValue: 0, maxValue: 100 })
-    .setOption('hAxis', { title: 'Month' })
-    .setOption('colors', _getSetColors_(labels))
-    .build();
-
-  sheet.insertChart(chart);
-}
-
-/**
- * Create current month comparison chart
- */
-function _createCurrentMonthComparisonChart_(sheet, monthlyData, startRow) {
-  const { studios } = monthlyData;
-
-  // Get current month data (last complete month)
-  const now = new Date();
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const monthKey = lastMonth.getFullYear() + '-' + String(lastMonth.getMonth()).padStart(2, '0');
-  const monthName = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-  // Write data
-  const dataStartRow = startRow;
-  sheet.getRange(dataStartRow, 1).setValue('Studio');
-  sheet.getRange(dataStartRow, 2).setValue('Hours');
-
-  studios.labels.forEach((label, i) => {
-    const hours = studios.hours[label][monthKey] || 0;
-    sheet.getRange(dataStartRow + 1 + i, 1).setValue(label);
-    sheet.getRange(dataStartRow + 1 + i, 2).setValue(hours);
-  });
-
-  // Create chart
-  const dataRange = sheet.getRange(dataStartRow, 1, studios.labels.length + 1, 2);
-
-  const chart = sheet.newChart()
-    .setChartType(Charts.ChartType.COLUMN)
-    .addRange(dataRange)
-    .setPosition(startRow + studios.labels.length + 3, 1, 0, 0)
-    .setOption('title', monthName + ' Studio Comparison (Hours)')
-    .setOption('height', 400)
-    .setOption('width', 600)
-    .setOption('legend', { position: 'none' })
-    .setOption('vAxis', { title: 'Hours' })
-    .setOption('hAxis', { title: 'Studio' })
-    .setOption('colors', _getStudioColors_(studios.labels))
-    .build();
-
-  sheet.insertChart(chart);
+  sheet.insertChart(chartBuilder.build());
 }
 
 /**
