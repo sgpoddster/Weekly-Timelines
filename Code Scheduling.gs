@@ -57,7 +57,7 @@ function onOpen(e) {
     .addSeparator()
     .addItem('📧 Send Test Monthly Summary Email', 'sendTestMonthlySummaryEmail')
     .addSeparator()
-    .addItem('📈 Update Dashboard', 'updateDashboard')
+    .addItem('📊 Update Dashboard Data', 'updateDashboardData')
     .addSeparator()
     .addItem('⚙️ Install Daily Auto-Update (2am)', 'installDailyTrigger')
     .addItem('⚙️ Install Monthly Email (2nd of month, 6am)', 'installMonthlyEmailTrigger')

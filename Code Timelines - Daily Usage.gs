@@ -29,6 +29,58 @@ const UNKNOWN_STUDIO_DAILY = 'Other';
 
 
 /* ==================================================
+ * DASHBOARD LAYOUT CONSTANTS
+ * All hidden data tables start at DASH_DATA_ROW (row 1).
+ * Pre-allocate DASH_MAX_MONTHS rows so charts never need range updates —
+ * just rewrite the data and charts auto-refresh.
+ * ================================================== */
+
+var DASH_DATA_ROW   = 1;   // All hidden data tables start here
+var DASH_MAX_MONTHS = 60;  // 5 years of monthly data headroom
+
+// ── Hidden data columns (1-based) ──────────────────────────────────────────
+// Overview multi-series: Month + one col per label in canonical order
+//   STUDIO_ORDER_DAILY = 5 labels → 6 cols total
+//   SET_ORDER_DAILY    = 7 labels → 8 cols total
+var DASH_OV_S_PCT_COL = 18;  // cols 18-23: Overview Studio %
+var DASH_OV_S_HRS_COL = 24;  // cols 24-29: Overview Studio Hours
+var DASH_OV_P_PCT_COL = 30;  // cols 30-37: Overview Set %
+var DASH_OV_P_HRS_COL = 38;  // cols 38-45: Overview Set Hours
+
+// Individual chart data (5 cols each: Month|Hrs|HrsLabel|Pct|PctLabel)
+// Studios (excl. Other): Studio 1=46, Studio 2=51, Studio 3=56, Studio 4=61
+var DASH_IV_S_COL_MAP = { 'Studio 1': 46, 'Studio 2': 51, 'Studio 3': 56, 'Studio 4': 61 };
+// Sets (excl. Other): Iris=66, Club=71, Nest=76, Exec=81, Nova=86, Soho=91
+var DASH_IV_P_COL_MAP = { 'Iris': 66, 'Club': 71, 'Nest': 76, 'Exec': 81, 'Nova': 86, 'Soho': 91 };
+
+// ── Fixed visual chart positions (rows/cols in Dashboard sheet) ─────────────
+// Overview charts: ~380px tall → ~22 rows; gap 2
+var DASH_OV_CHART_H   = 22;
+var DASH_OV_GAP       = 2;
+// Individual charts: ~550px tall → ~30 rows; gap 2
+var DASH_IV_CHART_H   = 30;
+var DASH_IV_GAP       = 2;
+var DASH_IV_ROW_BLOCK = DASH_IV_CHART_H + DASH_IV_GAP;  // 32
+
+// Fixed row anchors (computed from above so layout never shifts with data size)
+var DASH_OV_S_SECTION_ROW    = 4;
+var DASH_OV_S_PCT_CHART_ROW  = 5;
+var DASH_OV_S_HRS_CHART_ROW  = DASH_OV_S_PCT_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 29
+var DASH_OV_P_SECTION_ROW    = DASH_OV_S_HRS_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 53
+var DASH_OV_P_PCT_CHART_ROW  = DASH_OV_P_SECTION_ROW + 1;                                   // 54
+var DASH_OV_P_HRS_CHART_ROW  = DASH_OV_P_PCT_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 78
+// 4 studio indiv charts → 2 pairs → 2×32 = 64 rows
+var DASH_IV_S_SECTION_ROW    = DASH_OV_P_HRS_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 102
+var DASH_IV_S_CHART_START_ROW = DASH_IV_S_SECTION_ROW + 1;                                  // 103
+// 6 set indiv charts → 3 pairs → 3×32 = 96 rows
+var DASH_IV_P_SECTION_ROW    = DASH_IV_S_CHART_START_ROW + 2 * DASH_IV_ROW_BLOCK;          // 167
+var DASH_IV_P_CHART_START_ROW = DASH_IV_P_SECTION_ROW + 1;                                  // 168
+
+var DASH_LEFT_CHART_COL  = 1;
+var DASH_RIGHT_CHART_COL = 9;
+
+
+/* ==================================================
  * PUBLIC MENU FUNCTIONS
  * ================================================== */
 
@@ -422,75 +474,210 @@ function installMonthlyEmailTrigger() {
  * ================================================== */
 
 /**
- * Update dashboard with charts - run on 1st of each month
+ * SETUP: Full dashboard rebuild — creates all charts from scratch.
+ *
+ * Run this from the Apps Script editor (not the menu) since it wipes all
+ * existing charts and rebuilds layout. After running:
+ *   • Right-click each individual chart → Edit chart → Customise → Series
+ *     → tick "Data labels". Charts are persistent so you only do this once.
+ *
+ * Day-to-day data refreshes use updateDashboardData() instead.
  */
-function updateDashboard() {
+function setupDashboard() {
   const ss = SpreadsheetApp.getActive();
 
-  // Get or create Dashboard sheet
   let dashboard = ss.getSheetByName('Dashboard');
   if (!dashboard) {
     dashboard = ss.insertSheet('Dashboard');
   } else {
-    // Remove all existing charts before clearing data
     dashboard.getCharts().forEach(function(c) { dashboard.removeChart(c); });
     dashboard.clear();
   }
+  dashboard.setTabColor('#1a73e8');
 
-  // Set up dashboard
-  dashboard.setTabColor('#1a73e8'); // Blue color
+  dashboard.getRange('A1').setValue('Studio & Set Usage Dashboard')
+    .setFontSize(16).setFontWeight('bold');
 
-  // Add title
-  dashboard.getRange('A1').setValue('Studio & Set Usage Dashboard');
-  dashboard.getRange('A1').setFontSize(16).setFontWeight('bold');
-  dashboard.getRange('A2').setValue('Last updated: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
-
-  // Build monthly aggregation data
   const monthlyData = _getMonthlyAggregatedData_();
 
-  const months = monthlyData.months;
+  // Write all data to hidden columns first
+  _writeDashboardData_(dashboard, monthlyData);
 
-  // Layout: each chart block = data table (numMonths+1 rows) + 1 spacer + chart (20 rows) + 2 spacers
-  // Row anchors (1-based): title=1, subtitle=2, gap=3
-  // Studios % : data at row 4,  chart at row 4+numMonths+2
-  // Studios h : data at row 4+numMonths+2+20+2, chart after that
-  // Sets %    : ...
-  // Sets h    : ...
-  const n = months.length;
-  const CHART_H = 22;  // rows a chart occupies
-  const BLOCK   = (n + 1) + 1 + CHART_H + 2; // data + gap + chart + gap
+  // Section headers at fixed rows
+  _writeSectionHeader_(dashboard, DASH_OV_S_SECTION_ROW,    '📊 Studio Overview');
+  _writeSectionHeader_(dashboard, DASH_OV_P_SECTION_ROW,    '📊 Set Overview');
+  _writeSectionHeader_(dashboard, DASH_IV_S_SECTION_ROW,    '🏢 Individual Studios');
+  _writeSectionHeader_(dashboard, DASH_IV_P_SECTION_ROW,    '🎬 Individual Sets');
 
-  // ── Section 1: Overview — all studios together ───────────────────
-  var R = 4;
-  _writeSectionHeader_(dashboard, R - 1, '📊 Studio Overview');
-  _createTrendBlock_(dashboard, months, monthlyData.studios, R,
-    'Studio Usage — % of Total Hours', 'pct', _getStudioColors_(monthlyData.studios.labels));
-  R += BLOCK;
-  _createTrendBlock_(dashboard, months, monthlyData.studios, R,
-    'Studio Usage — Hours per Month', 'h', _getStudioColors_(monthlyData.studios.labels));
-  R += BLOCK;
+  // Pre-allocated range size (header + 60 months)
+  var totalRows = DASH_MAX_MONTHS + 1;
+  var sLen = STUDIO_ORDER_DAILY.length;  // 5
+  var pLen = SET_ORDER_DAILY.length;     // 7
 
-  // ── Section 2: Overview — all sets together ──────────────────────
-  _writeSectionHeader_(dashboard, R - 1, '📊 Set Overview');
-  _createTrendBlock_(dashboard, months, monthlyData.sets, R,
-    'Set Usage — % of Total Hours', 'pct', _getSetColors_(monthlyData.sets.labels));
-  R += BLOCK;
-  _createTrendBlock_(dashboard, months, monthlyData.sets, R,
-    'Set Usage — Hours per Month', 'h', _getSetColors_(monthlyData.sets.labels));
-  R += BLOCK;
+  // ── Overview charts (full-width, fixed positions) ──────────────────
+  _insertOverviewChart_(dashboard,
+    dashboard.getRange(DASH_DATA_ROW, DASH_OV_S_PCT_COL, totalRows, sLen + 1),
+    DASH_OV_S_PCT_CHART_ROW, 1,
+    'Studio Usage — % of Total Hours', 'pct',
+    _getStudioColors_(STUDIO_ORDER_DAILY));
 
-  // ── Section 3: Individual studio charts (2-column grid) ──────────
-  _writeSectionHeader_(dashboard, R - 1, '🏢 Individual Studios');
-  R = _createIndividualCharts_(dashboard, months, monthlyData.studios, R,
-    _getStudioColors_(monthlyData.studios.labels), monthlyData.studios.labels);
-  R += 2;
+  _insertOverviewChart_(dashboard,
+    dashboard.getRange(DASH_DATA_ROW, DASH_OV_S_HRS_COL, totalRows, sLen + 1),
+    DASH_OV_S_HRS_CHART_ROW, 1,
+    'Studio Usage — Hours per Month', 'h',
+    _getStudioColors_(STUDIO_ORDER_DAILY));
 
-  // ── Section 4: Individual set charts (2-column grid) ─────────────
-  _writeSectionHeader_(dashboard, R - 1, '🎬 Individual Sets');
-  _createIndividualCharts_(dashboard, months, monthlyData.sets, R,
-    _getSetColors_(monthlyData.sets.labels), monthlyData.sets.labels);
+  _insertOverviewChart_(dashboard,
+    dashboard.getRange(DASH_DATA_ROW, DASH_OV_P_PCT_COL, totalRows, pLen + 1),
+    DASH_OV_P_PCT_CHART_ROW, 1,
+    'Set Usage — % of Total Hours', 'pct',
+    _getSetColors_(SET_ORDER_DAILY));
 
-  SpreadsheetApp.getUi().alert('Dashboard updated successfully!');
+  _insertOverviewChart_(dashboard,
+    dashboard.getRange(DASH_DATA_ROW, DASH_OV_P_HRS_COL, totalRows, pLen + 1),
+    DASH_OV_P_HRS_CHART_ROW, 1,
+    'Set Usage — Hours per Month', 'h',
+    _getSetColors_(SET_ORDER_DAILY));
+
+  // ── Individual charts (2-column grid, fixed positions) ─────────────
+  var studioLabels = Object.keys(DASH_IV_S_COL_MAP);  // Studio 1-4
+  var setLabels    = Object.keys(DASH_IV_P_COL_MAP);   // 6 sets
+
+  _insertIndivCharts_(dashboard, studioLabels, DASH_IV_S_CHART_START_ROW,
+    DASH_IV_S_COL_MAP, _getStudioColors_(studioLabels), totalRows);
+
+  _insertIndivCharts_(dashboard, setLabels, DASH_IV_P_CHART_START_ROW,
+    DASH_IV_P_COL_MAP, _getSetColors_(setLabels), totalRows);
+
+  SpreadsheetApp.getUi().alert(
+    'Dashboard set up successfully! ✅\n\n' +
+    '💡 To enable data labels on the individual charts:\n' +
+    '   Right-click a chart → Edit chart → Customise → Series → tick "Data labels"\n\n' +
+    'You only need to do this once per chart — labels persist through future data updates.'
+  );
+}
+
+/**
+ * DATA UPDATE: Rewrites chart data without touching any charts.
+ *
+ * Run this on the 1st of each month (or via menu) to add the latest month.
+ * Charts auto-refresh. Any chart customisations (data labels, colours etc.)
+ * are preserved because no charts are created or removed.
+ */
+function updateDashboardData() {
+  const ss = SpreadsheetApp.getActive();
+  var dashboard = ss.getSheetByName('Dashboard');
+  if (!dashboard) {
+    SpreadsheetApp.getUi().alert(
+      'Dashboard sheet not found.\n\nRun setupDashboard() from the Apps Script editor first.'
+    );
+    return;
+  }
+
+  const monthlyData = _getMonthlyAggregatedData_();
+  _writeDashboardData_(dashboard, monthlyData);
+
+  SpreadsheetApp.getUi().alert('Dashboard data updated! Charts will refresh automatically.');
+}
+
+/**
+ * Write ALL data to the fixed hidden column positions.
+ * Called by both setupDashboard() and updateDashboardData().
+ */
+function _writeDashboardData_(dashboard, monthlyData) {
+  // Overview blocks (canonical label order so column positions never shift)
+  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.studios,
+    DASH_OV_S_PCT_COL, 'pct', STUDIO_ORDER_DAILY);
+  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.studios,
+    DASH_OV_S_HRS_COL, 'h',   STUDIO_ORDER_DAILY);
+  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.sets,
+    DASH_OV_P_PCT_COL, 'pct', SET_ORDER_DAILY);
+  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.sets,
+    DASH_OV_P_HRS_COL, 'h',   SET_ORDER_DAILY);
+
+  // Individual chart blocks
+  _writeIndivBlock_(dashboard, monthlyData.months, monthlyData.studios, DASH_IV_S_COL_MAP);
+  _writeIndivBlock_(dashboard, monthlyData.months, monthlyData.sets,    DASH_IV_P_COL_MAP);
+
+  // Update "last updated" line
+  dashboard.getRange('A2').setValue(
+    'Last updated: ' + new Date().toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric'
+    })
+  );
+}
+
+/**
+ * Write a multi-series overview data table to hidden columns.
+ * Always uses the canonical label order so the column mapping never changes.
+ */
+function _writeOverviewBlock_(dashboard, months, data, startCol, metric, canonicalLabels) {
+  var numCols = canonicalLabels.length + 1;  // Month + one per label
+  var n       = months.length;
+
+  // Header (always overwrite)
+  dashboard.getRange(DASH_DATA_ROW, startCol, 1, numCols)
+    .setValues([['Month'].concat(canonicalLabels)])
+    .setFontWeight('bold');
+
+  // Format: month as text, data as 1 dp
+  dashboard.getRange(DASH_DATA_ROW + 1, startCol,     DASH_MAX_MONTHS, 1).setNumberFormat('@');
+  dashboard.getRange(DASH_DATA_ROW + 1, startCol + 1, DASH_MAX_MONTHS, canonicalLabels.length)
+    .setNumberFormat('0.0');
+
+  // Clear previous data rows then write fresh
+  dashboard.getRange(DASH_DATA_ROW + 1, startCol, DASH_MAX_MONTHS, numCols).clearContent();
+
+  if (n > 0) {
+    var rows = months.map(function(m) {
+      var mk  = m.year + '-' + String(m.month).padStart(2, '0');
+      var row = [m.name];
+      canonicalLabels.forEach(function(lbl) {
+        var val = (metric === 'pct')
+          ? (data.percentages[lbl] ? data.percentages[lbl][mk] || 0 : 0)
+          : (data.hours[lbl]       ? data.hours[lbl][mk]       || 0 : 0);
+        row.push(Math.round(val * 10) / 10);
+      });
+      return row;
+    });
+    dashboard.getRange(DASH_DATA_ROW + 1, startCol, n, numCols).setValues(rows);
+  }
+}
+
+/**
+ * Write individual chart data (5 cols each) to hidden columns.
+ * colMap: { label: startCol } — fixed column positions per label.
+ */
+function _writeIndivBlock_(dashboard, months, data, colMap) {
+  var n = months.length;
+  Object.keys(colMap).forEach(function(label) {
+    var dataCol = colMap[label];
+
+    // Header
+    dashboard.getRange(DASH_DATA_ROW, dataCol, 1, 5)
+      .setValues([['Month', 'Hours', 'HoursLabel', 'Pct', 'PctLabel']])
+      .setFontWeight('bold');
+
+    // Number formats (set once; persist even for empty rows)
+    dashboard.getRange(DASH_DATA_ROW + 1, dataCol,     DASH_MAX_MONTHS, 1).setNumberFormat('@');
+    dashboard.getRange(DASH_DATA_ROW + 1, dataCol + 1, DASH_MAX_MONTHS, 1).setNumberFormat('0.0');
+    dashboard.getRange(DASH_DATA_ROW + 1, dataCol + 2, DASH_MAX_MONTHS, 1).setNumberFormat('@');
+    dashboard.getRange(DASH_DATA_ROW + 1, dataCol + 3, DASH_MAX_MONTHS, 1).setNumberFormat('0.0');
+    dashboard.getRange(DASH_DATA_ROW + 1, dataCol + 4, DASH_MAX_MONTHS, 1).setNumberFormat('@');
+
+    // Clear then write
+    dashboard.getRange(DASH_DATA_ROW + 1, dataCol, DASH_MAX_MONTHS, 5).clearContent();
+
+    if (n > 0 && data.hours[label]) {
+      var rows = months.map(function(m) {
+        var mk  = m.year + '-' + String(m.month).padStart(2, '0');
+        var hrs = Math.round((data.hours[label][mk]       || 0) * 10) / 10;
+        var pct = Math.round((data.percentages[label][mk] || 0) * 10) / 10;
+        return [m.name, hrs, hrs + 'h', pct, pct + '%'];
+      });
+      dashboard.getRange(DASH_DATA_ROW + 1, dataCol, n, 5).setValues(rows);
+    }
+  });
 }
 
 // Data collection started October 2025 — always chart from here
@@ -592,80 +779,80 @@ function _aggregateByMonth_(sheet, months) {
 }
 
 /**
- * Write a data table + chart for one trend block.
- *
- * @param {Sheet}  sheet    - Dashboard sheet
- * @param {Array}  months   - Array of month objects from _getMonthlyAggregatedData_
- * @param {Object} data     - { labels, percentages, hours } from _aggregateByMonth_
- * @param {number} startRow - 1-based row where the data table starts
- * @param {string} title    - Chart title
- * @param {string} metric   - 'pct' for percentage, 'h' for hours
- * @param {Array}  colors   - Array of hex colour strings
+ * Insert a full-width overview COLUMN chart at a fixed row position.
+ * Data is already written in the hidden columns — this just creates the chart.
  */
-function _createTrendBlock_(sheet, months, data, startRow, title, metric, colors) {
-  var labels = data.labels;
-  if (!labels || labels.length === 0) return;
-
-  var numCols = labels.length + 1; // Month col + one col per label
-  var numRows = months.length + 1; // Header row + one row per month
-
-  // ------------------------------------------------------------------
-  // 1. Write header row
-  // ------------------------------------------------------------------
-  var headerVals = [['Month'].concat(labels)];
-  sheet.getRange(startRow, 1, 1, numCols).setValues(headerVals).setFontWeight('bold');
-
-  // ------------------------------------------------------------------
-  // 2. Force month column to TEXT so Sheets doesn't parse it as a date
-  // ------------------------------------------------------------------
-  sheet.getRange(startRow + 1, 1, months.length, 1).setNumberFormat('@');
-
-  // ------------------------------------------------------------------
-  // 3. Write data rows
-  // ------------------------------------------------------------------
-  var dataRows = months.map(function(m) {
-    var mk = m.year + '-' + String(m.month).padStart(2, '0');
-    var row = [m.name];
-    labels.forEach(function(label) {
-      if (metric === 'pct') {
-        row.push(Math.round((data.percentages[label][mk] || 0) * 10) / 10);
-      } else {
-        row.push(Math.round((data.hours[label][mk] || 0) * 100) / 100);
-      }
-    });
-    return row;
-  });
-  sheet.getRange(startRow + 1, 1, months.length, numCols).setValues(dataRows);
-
-  // Format numeric columns to 1 decimal place
-  sheet.getRange(startRow + 1, 2, months.length, labels.length)
-       .setNumberFormat('0.0');
-
-  // ------------------------------------------------------------------
-  // 4. Create chart from the data table
-  // ------------------------------------------------------------------
-  var tableRange   = sheet.getRange(startRow, 1, numRows, numCols);
-  var chartRow     = startRow + numRows + 1;   // one blank row gap
-  var vAxisOptions = metric === 'pct'
+function _insertOverviewChart_(sheet, dataRange, chartRow, chartCol, title, metric, colors) {
+  var vAxisOptions = (metric === 'pct')
     ? { title: '% of total hours', minValue: 0, maxValue: 100 }
     : { title: 'Hours', minValue: 0 };
 
-  var chartBuilder = sheet.newChart()
-    .setChartType(Charts.ChartType.COLUMN)
-    .addRange(tableRange)
-    .setNumHeaders(1)
-    .setPosition(chartRow, 1, 0, 0)
-    .setOption('title', title)
-    .setOption('titleTextStyle', { fontSize: 14, bold: true })
-    .setOption('height', 380)
-    .setOption('width', 900)
-    .setOption('isStacked', false)
-    .setOption('legend', { position: 'right' })
-    .setOption('vAxis', vAxisOptions)
-    .setOption('hAxis', { title: 'Month', slantedText: true, slantedTextAngle: 45 })
-    .setOption('colors', colors);
+  sheet.insertChart(
+    sheet.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(dataRange)
+      .setNumHeaders(1)
+      .setPosition(chartRow, chartCol, 0, 0)
+      .setOption('title', title)
+      .setOption('titleTextStyle', { fontSize: 14, bold: true })
+      .setOption('height', 380)
+      .setOption('width', 900)
+      .setOption('isStacked', false)
+      .setOption('legend', { position: 'right' })
+      .setOption('vAxis', vAxisOptions)
+      .setOption('hAxis', { title: 'Month', slantedText: true, slantedTextAngle: 45 })
+      .setOption('colors', colors)
+      .build()
+  );
+}
 
-  sheet.insertChart(chartBuilder.build());
+/**
+ * Insert individual dual-axis COLUMN charts in a 2-column grid at fixed positions.
+ * Each chart: Hours (left axis) + % of total (right axis).
+ * Data is already written in the hidden columns — this just creates the charts.
+ * totalRows: header + DASH_MAX_MONTHS (pre-allocated so range never needs updating).
+ */
+function _insertIndivCharts_(sheet, labels, startRow, colMap, colors, totalRows) {
+  labels.forEach(function(label, idx) {
+    var dataCol    = colMap[label];
+    if (!dataCol) return;
+
+    var isLeft     = (idx % 2 === 0);
+    var chartRow   = startRow + Math.floor(idx / 2) * DASH_IV_ROW_BLOCK;
+    var chartCol   = isLeft ? DASH_LEFT_CHART_COL : DASH_RIGHT_CHART_COL;
+    var solidColor = colors[idx] || '#4285f4';
+    var lightColor = _lightenColor_(solidColor, 0.45);
+    var dataRange  = sheet.getRange(DASH_DATA_ROW, dataCol, totalRows, 5);
+
+    sheet.insertChart(
+      sheet.newChart()
+        .setChartType(Charts.ChartType.COLUMN)
+        .addRange(dataRange)
+        .setNumHeaders(1)
+        .setPosition(chartRow, chartCol, 0, 0)
+        .setOption('title', label + ' — Hours & % of Total')
+        .setOption('titleTextStyle', { fontSize: 13, bold: true, color: solidColor })
+        .setOption('height', 550)
+        .setOption('width', 800)
+        .setOption('legend', { position: 'bottom' })
+        .setOption('colors', [solidColor, lightColor])
+        .setOption('annotations', {
+          alwaysOutside: true,
+          textStyle: { fontSize: 10, bold: true, color: '#333333', auraColor: 'none' },
+          stem: { color: 'transparent', length: 4 }
+        })
+        .setOption('series', {
+          0: { targetAxisIndex: 0 },
+          1: { targetAxisIndex: 1 }
+        })
+        .setOption('vAxes', {
+          0: { title: 'Hours', minValue: 0 },
+          1: { title: '% of total', minValue: 0, maxValue: 100 }
+        })
+        .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
+        .build()
+    );
+  });
 }
 
 /**
@@ -697,17 +884,8 @@ function _lightenColor_(hex, factor) {
              + ('0' + b.toString(16)).slice(-2);
 }
 
-/**
- * Create one dual-series COLUMN chart per label in a 2-column grid.
- * Each month shows TWO bars: Hours (left axis) + % of total (right axis).
- * Data labels (e.g. "12.5h", "33.5%") appear above each bar automatically
- * via annotation columns in the data table.
- *
- * Data tables are written to far-right hidden columns (off visible area)
- * so only the charts appear on the dashboard.
- *
- * Returns the next available row after all charts.
- */
+// _createIndividualCharts_ removed — replaced by _insertIndivCharts_() above.
+// This stub prevents "not defined" errors if old triggers still reference it.
 function _createIndividualCharts_(sheet, months, data, startRow, colors, labels) {
   if (!labels || labels.length === 0) return startRow;
 
@@ -849,25 +1027,30 @@ function _getSetColors_(labels) {
 }
 
 /**
- * Install monthly dashboard update trigger for 1st of month at 6am
+ * Install monthly dashboard data-update trigger for 1st of month at 6am.
+ * This triggers updateDashboardData() which refreshes data without
+ * touching charts — preserving any manual customisations (e.g. data labels).
  */
 function installDashboardTrigger() {
-  // Delete existing dashboard triggers first
+  // Remove any old triggers for both the old and new handler names
   const triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(trigger => {
-    if (trigger.getHandlerFunction() === 'updateDashboard') {
+  triggers.forEach(function(trigger) {
+    var fn = trigger.getHandlerFunction();
+    if (fn === 'updateDashboard' || fn === 'updateDashboardData') {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 
-  // Create new trigger for 1st of month at 6am
-  ScriptApp.newTrigger('updateDashboard')
+  ScriptApp.newTrigger('updateDashboardData')
     .timeBased()
     .onMonthDay(1)
     .atHour(6)
     .create();
 
-  SpreadsheetApp.getUi().alert('Dashboard trigger installed!\n\nWill update dashboard on the 1st of each month at 6am');
+  SpreadsheetApp.getUi().alert(
+    'Dashboard trigger installed!\n\nWill refresh dashboard data on the 1st of each month at 6am.\n' +
+    'Charts are not rebuilt — all your customisations (data labels etc.) are preserved.'
+  );
 }
 
 
