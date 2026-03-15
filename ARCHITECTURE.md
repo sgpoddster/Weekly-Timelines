@@ -104,11 +104,10 @@ SG Weekly Timelines/
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │ Dashboard Sheet (data refreshed monthly, charts permanent)      │   │
-│  │ • Overview: Studio % and Hours — full-width column charts       │   │
-│  │ • Overview: Set % and Hours — full-width column charts          │   │
-│  │ • Individual: one dual-axis chart per studio (excl. Other)      │   │
-│  │ • Individual: one dual-axis chart per set   (excl. Other)       │   │
-│  │ • Hidden data tables in cols 18-91 (pre-allocated 60 months)    │   │
+│  │ • Individual dual-axis chart per studio (Studio 1-4)            │   │
+│  │ • Individual dual-axis chart per set (Iris/Club/Nest/Exec/…)   │   │
+│  │ • Each chart: Hours (left axis) + % of total (right axis)       │   │
+│  │ • Hidden data tables in cols 18-63 (pre-allocated 60 months)    │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
                          │
@@ -763,37 +762,35 @@ Labels persist through all future `updateDashboardData()` calls.
 
 ##### Hidden data table layout
 
-All data lives in pre-allocated hidden columns (cols 18-91), keeping the visible area chart-only. Each table has a fixed header row plus `DASH_MAX_MONTHS = 60` pre-allocated data rows (5 years of headroom). Because the range never changes, chart ranges never need updating.
+All data lives in pre-allocated hidden columns (cols 18-63), keeping the visible area chart-only. Each table has a fixed header row plus `DASH_MAX_MONTHS = 60` pre-allocated data rows (5 years of headroom). Because the range never changes, chart ranges never need updating.
 
 ```
-Cols 18-23   Overview Studio %      (Month + Studio 1/2/3/4/Other)
-Cols 24-29   Overview Studio Hours  (same structure)
-Cols 30-37   Overview Set %         (Month + Iris/Club/Nest/Exec/Nova/Soho/Other)
-Cols 38-45   Overview Set Hours     (same structure)
-Cols 46-65   Individual studio charts  (Studio 1, Studio 2, Studio 3, Studio 4 — 5 cols each)
-Cols 66-91   Individual set charts     (Iris, Club, Nest, Exec, Nova, Soho — 5 cols each)
+Cols 18-22   Studio 1   (Month | Hours | HoursLabel | Pct | PctLabel)
+Cols 23-27   Studio 2   (same structure)
+Cols 28-32   Studio 3
+Cols 33-37   Studio 4
+Cols 38-42   Iris
+Cols 43-47   Club
+Cols 48-52   Nest
+Cols 53-57   Exec
+Cols 58-62   Nova
+Cols 63-67   Soho
 ```
-
-Each individual chart's 5-column block: `Month | Hours | HoursLabel | Pct | PctLabel`
 
 ##### Fixed visual layout
 
 Chart positions are derived from named constants so the layout never shifts:
 
 ```
-Row 4   Section header: Studio Overview
-Row 5   Overview Studio % chart        (380px tall, full width)
-Row 29  Overview Studio Hours chart
-Row 53  Section header: Set Overview
-Row 54  Overview Set % chart
-Row 78  Overview Set Hours chart
-Row 102 Section header: Individual Studios
-Row 103 Studio 1 (col A) | Studio 2 (col I)
-Row 135 Studio 3 (col A) | Studio 4 (col I)
-Row 167 Section header: Individual Sets
-Row 168 Iris (col A) | Club (col I)   (550px tall)
-Row 200 Nest (col A) | Exec (col I)
-Row 232 Nova (col A) | Soho (col I)
+Row 1   Title
+Row 2   Last updated
+Row 4   Section header: Individual Studios
+Row 5   Studio 1 (col A) | Studio 2 (col I)   (550px tall)
+Row 37  Studio 3 (col A) | Studio 4 (col I)
+Row 69  Section header: Individual Sets
+Row 70  Iris (col A) | Club (col I)
+Row 102 Nest (col A) | Exec (col I)
+Row 134 Nova (col A) | Soho (col I)
 ```
 
 ##### Data aggregation (`_getMonthlyAggregatedData_`)

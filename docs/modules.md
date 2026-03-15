@@ -46,10 +46,9 @@ This project combines multiple feature modules into a single Google Apps Script 
 - `installDashboardTrigger()` - Schedule monthly `updateDashboardData` on 1st at 6am
 
 **Dashboard Charts (persistent — not recreated on data update):**
-- Overview Studio % and Hours — full-width column charts (Oct 2025 → present)
-- Overview Set % and Hours — full-width column charts
-- Individual dual-axis charts per studio (Studio 1-4): Hours left axis, % of total right axis
-- Individual dual-axis charts per set (Iris, Club, Nest, Exec, Nova, Soho): same
+- Individual dual-axis chart per studio (Studio 1-4): Hours left axis, % of total right axis
+- Individual dual-axis chart per set (Iris, Club, Nest, Exec, Nova, Soho): same
+- Data labels set manually once after `setupDashboard()` — persist through all future updates
 
 **Original Project:** SG Weekly Timelines (dashboard feature added Feb 2025)
 

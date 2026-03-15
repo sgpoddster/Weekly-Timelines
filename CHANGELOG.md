@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-15 - Dashboard Refinements
+
+### 31. **Remove Overview Charts; Individual Charts Only** (Commit: TBD)
+- **Change:** Removed the four full-width overview charts (Studio % / Hours, Set % / Hours). Only the individual per-studio and per-set dual-axis charts remain.
+- **Why:** Overview charts not needed — individual breakdowns are sufficient.
+- **Layout:** Individual studio charts now start at row 5 (was row 103); sets at row 70 (was row 168). Much more compact.
+- **Hidden columns compacted:** Studio data now cols 18-37; set data cols 38-63. Former overview range (18-45) freed up.
+- **`_insertOverviewChart_()` and `_writeOverviewBlock_()`** kept as dead code but no longer called.
+- **No re-setup required** — overview charts deleted manually from sheet by user.
+- **Files Modified:** `Code Timelines - Daily Usage.gs`
+
+---
+
 ## 2026-03-15 - Persistent Dashboard Architecture
 
 ### Summary

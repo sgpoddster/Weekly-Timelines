@@ -39,42 +39,25 @@ var DASH_DATA_ROW   = 1;   // All hidden data tables start here
 var DASH_MAX_MONTHS = 60;  // 5 years of monthly data headroom
 
 // ── Hidden data columns (1-based) ──────────────────────────────────────────
-// Overview multi-series: Month + one col per label in canonical order
-//   STUDIO_ORDER_DAILY = 5 labels → 6 cols total
-//   SET_ORDER_DAILY    = 7 labels → 8 cols total
-var DASH_OV_S_PCT_COL = 18;  // cols 18-23: Overview Studio %
-var DASH_OV_S_HRS_COL = 24;  // cols 24-29: Overview Studio Hours
-var DASH_OV_P_PCT_COL = 30;  // cols 30-37: Overview Set %
-var DASH_OV_P_HRS_COL = 38;  // cols 38-45: Overview Set Hours
-
 // Individual chart data (5 cols each: Month|Hrs|HrsLabel|Pct|PctLabel)
-// Studios (excl. Other): Studio 1=46, Studio 2=51, Studio 3=56, Studio 4=61
-var DASH_IV_S_COL_MAP = { 'Studio 1': 46, 'Studio 2': 51, 'Studio 3': 56, 'Studio 4': 61 };
-// Sets (excl. Other): Iris=66, Club=71, Nest=76, Exec=81, Nova=86, Soho=91
-var DASH_IV_P_COL_MAP = { 'Iris': 66, 'Club': 71, 'Nest': 76, 'Exec': 81, 'Nova': 86, 'Soho': 91 };
+// Studios (excl. Other): Studio 1=18, Studio 2=23, Studio 3=28, Studio 4=33
+var DASH_IV_S_COL_MAP = { 'Studio 1': 18, 'Studio 2': 23, 'Studio 3': 28, 'Studio 4': 33 };
+// Sets (excl. Other): Iris=38, Club=43, Nest=48, Exec=53, Nova=58, Soho=63
+var DASH_IV_P_COL_MAP = { 'Iris': 38, 'Club': 43, 'Nest': 48, 'Exec': 53, 'Nova': 58, 'Soho': 63 };
 
 // ── Fixed visual chart positions (rows/cols in Dashboard sheet) ─────────────
-// Overview charts: ~380px tall → ~22 rows; gap 2
-var DASH_OV_CHART_H   = 22;
-var DASH_OV_GAP       = 2;
 // Individual charts: ~550px tall → ~30 rows; gap 2
 var DASH_IV_CHART_H   = 30;
 var DASH_IV_GAP       = 2;
 var DASH_IV_ROW_BLOCK = DASH_IV_CHART_H + DASH_IV_GAP;  // 32
 
-// Fixed row anchors (computed from above so layout never shifts with data size)
-var DASH_OV_S_SECTION_ROW    = 4;
-var DASH_OV_S_PCT_CHART_ROW  = 5;
-var DASH_OV_S_HRS_CHART_ROW  = DASH_OV_S_PCT_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 29
-var DASH_OV_P_SECTION_ROW    = DASH_OV_S_HRS_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 53
-var DASH_OV_P_PCT_CHART_ROW  = DASH_OV_P_SECTION_ROW + 1;                                   // 54
-var DASH_OV_P_HRS_CHART_ROW  = DASH_OV_P_PCT_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 78
-// 4 studio indiv charts → 2 pairs → 2×32 = 64 rows
-var DASH_IV_S_SECTION_ROW    = DASH_OV_P_HRS_CHART_ROW + DASH_OV_CHART_H + DASH_OV_GAP;   // 102
-var DASH_IV_S_CHART_START_ROW = DASH_IV_S_SECTION_ROW + 1;                                  // 103
-// 6 set indiv charts → 3 pairs → 3×32 = 96 rows
-var DASH_IV_P_SECTION_ROW    = DASH_IV_S_CHART_START_ROW + 2 * DASH_IV_ROW_BLOCK;          // 167
-var DASH_IV_P_CHART_START_ROW = DASH_IV_P_SECTION_ROW + 1;                                  // 168
+// Fixed row anchors — individual charts start near the top (no overview section)
+// 4 studio charts → 2 pairs → 2×32 = 64 rows
+var DASH_IV_S_SECTION_ROW     = 4;
+var DASH_IV_S_CHART_START_ROW = 5;                                    // rows 5-68
+// 6 set charts → 3 pairs → 3×32 = 96 rows
+var DASH_IV_P_SECTION_ROW     = DASH_IV_S_CHART_START_ROW + 2 * DASH_IV_ROW_BLOCK;  // 69
+var DASH_IV_P_CHART_START_ROW = DASH_IV_P_SECTION_ROW + 1;                          // 70
 
 var DASH_LEFT_CHART_COL  = 1;
 var DASH_RIGHT_CHART_COL = 9;
@@ -504,40 +487,11 @@ function setupDashboard() {
   _writeDashboardData_(dashboard, monthlyData);
 
   // Section headers at fixed rows
-  _writeSectionHeader_(dashboard, DASH_OV_S_SECTION_ROW,    '📊 Studio Overview');
-  _writeSectionHeader_(dashboard, DASH_OV_P_SECTION_ROW,    '📊 Set Overview');
-  _writeSectionHeader_(dashboard, DASH_IV_S_SECTION_ROW,    '🏢 Individual Studios');
-  _writeSectionHeader_(dashboard, DASH_IV_P_SECTION_ROW,    '🎬 Individual Sets');
+  _writeSectionHeader_(dashboard, DASH_IV_S_SECTION_ROW, '🏢 Individual Studios');
+  _writeSectionHeader_(dashboard, DASH_IV_P_SECTION_ROW, '🎬 Individual Sets');
 
   // Pre-allocated range size (header + 60 months)
   var totalRows = DASH_MAX_MONTHS + 1;
-  var sLen = STUDIO_ORDER_DAILY.length;  // 5
-  var pLen = SET_ORDER_DAILY.length;     // 7
-
-  // ── Overview charts (full-width, fixed positions) ──────────────────
-  _insertOverviewChart_(dashboard,
-    dashboard.getRange(DASH_DATA_ROW, DASH_OV_S_PCT_COL, totalRows, sLen + 1),
-    DASH_OV_S_PCT_CHART_ROW, 1,
-    'Studio Usage — % of Total Hours', 'pct',
-    _getStudioColors_(STUDIO_ORDER_DAILY));
-
-  _insertOverviewChart_(dashboard,
-    dashboard.getRange(DASH_DATA_ROW, DASH_OV_S_HRS_COL, totalRows, sLen + 1),
-    DASH_OV_S_HRS_CHART_ROW, 1,
-    'Studio Usage — Hours per Month', 'h',
-    _getStudioColors_(STUDIO_ORDER_DAILY));
-
-  _insertOverviewChart_(dashboard,
-    dashboard.getRange(DASH_DATA_ROW, DASH_OV_P_PCT_COL, totalRows, pLen + 1),
-    DASH_OV_P_PCT_CHART_ROW, 1,
-    'Set Usage — % of Total Hours', 'pct',
-    _getSetColors_(SET_ORDER_DAILY));
-
-  _insertOverviewChart_(dashboard,
-    dashboard.getRange(DASH_DATA_ROW, DASH_OV_P_HRS_COL, totalRows, pLen + 1),
-    DASH_OV_P_HRS_CHART_ROW, 1,
-    'Set Usage — Hours per Month', 'h',
-    _getSetColors_(SET_ORDER_DAILY));
 
   // ── Individual charts (2-column grid, fixed positions) ─────────────
   var studioLabels = Object.keys(DASH_IV_S_COL_MAP);  // Studio 1-4
@@ -585,17 +539,7 @@ function updateDashboardData() {
  * Called by both setupDashboard() and updateDashboardData().
  */
 function _writeDashboardData_(dashboard, monthlyData) {
-  // Overview blocks (canonical label order so column positions never shift)
-  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.studios,
-    DASH_OV_S_PCT_COL, 'pct', STUDIO_ORDER_DAILY);
-  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.studios,
-    DASH_OV_S_HRS_COL, 'h',   STUDIO_ORDER_DAILY);
-  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.sets,
-    DASH_OV_P_PCT_COL, 'pct', SET_ORDER_DAILY);
-  _writeOverviewBlock_(dashboard, monthlyData.months, monthlyData.sets,
-    DASH_OV_P_HRS_COL, 'h',   SET_ORDER_DAILY);
-
-  // Individual chart blocks
+  // Individual chart blocks only (overview charts removed)
   _writeIndivBlock_(dashboard, monthlyData.months, monthlyData.studios, DASH_IV_S_COL_MAP);
   _writeIndivBlock_(dashboard, monthlyData.months, monthlyData.sets,    DASH_IV_P_COL_MAP);
 
