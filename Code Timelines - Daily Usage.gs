@@ -1490,7 +1490,12 @@ function _buildMonthlySummaryHtml_(type, excludeOther) {
     colMap[header[c]] = c;
   }
 
-  // Aggregate data for the month
+  // Aggregate data for the month.
+  // Use getFullYear()/getMonth() key matching (same as dashboard) rather than
+  // date-range comparison — new Date("YYYY-MM-DD") parses as UTC midnight which
+  // causes the last day of the month to fail a <= monthEnd check in UTC+8/UTC+9.
+  const targetMk = lastMonth.getFullYear() + '-' + String(lastMonth.getMonth()).padStart(2, '0');
+
   let totalHours = 0;
   let totalHoursExclOther = 0; // Total excluding "Other"
   const byCategory = {}; // studio or set
@@ -1501,9 +1506,11 @@ function _buildMonthlySummaryHtml_(type, excludeOther) {
     const dateStr = data[r][0]; // First column is date (YYYY-MM-DD)
     if (!dateStr) continue;
 
-    // Check if date is within the target month
+    // Match on year+month using local time (getMonth() = 0-based) to avoid
+    // timezone edge cases on the first/last day of the month.
     const rowDate = new Date(dateStr);
-    if (rowDate >= monthStart && rowDate <= monthEnd) {
+    const rowMk = rowDate.getFullYear() + '-' + String(rowDate.getMonth()).padStart(2, '0');
+    if (rowMk === targetMk) {
       // Sum up hours and counts for each category
       labels.forEach(label => {
         const hoursCol = colMap[label + ' (h)'];
