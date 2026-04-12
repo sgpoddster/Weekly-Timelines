@@ -359,53 +359,222 @@ function sendTestMonthlySummaryEmail() {
  * This should be triggered on the 2nd of each month
  */
 function sendMonthlySummaryEmail() {
-  const recipient = 'ben@poddster.com';
+  const recipient  = 'ben@poddster.com';
+  const now        = new Date();
+  const lastMonth  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const monthName  = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const targetMk   = lastMonth.getFullYear() + '-' + String(lastMonth.getMonth()).padStart(2, '0');
 
-  // Get last complete month for subject line
-  const now = new Date();
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const monthName = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthlyData = _getMonthlyAggregatedData_();
+  const weeklyRows  = _getWeeklyHoursRows_();
 
-  const subject = 'Monthly Usage Summary - ' + monthName;
-
-  // Get all 4 summaries
-  const studioHtml = _buildMonthlySummaryHtml_('studio', false);
-  const studioExclHtml = _buildMonthlySummaryHtml_('studio', true);
-  const setHtml = _buildMonthlySummaryHtml_('set', false);
-  const setExclHtml = _buildMonthlySummaryHtml_('set', true);
-
-  // Extract CSS from the first summary (all have same CSS)
-  const css = _extractCss_(studioHtml);
-
-  // Build email with all styling preserved
-  let emailBody = '<html><head><meta charset="UTF-8">';
-  emailBody += css; // Include all the CSS
-  emailBody += '</head><body style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px;">';
-
-  // Add header
-  emailBody += '<div style="max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
-  emailBody += '<h1 style="color: #1a73e8; text-align: center; margin-bottom: 30px;">Monthly Usage Summary - ' + monthName + '</h1>';
-
-  // Add all 4 summaries with their content
-  emailBody += _extractBodyContent_(studioHtml);
-  emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
-
-  emailBody += _extractBodyContent_(studioExclHtml);
-  emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
-
-  emailBody += _extractBodyContent_(setHtml);
-  emailBody += '<hr style="margin: 40px 0; border: none; border-top: 2px solid #e8eaed;">';
-
-  emailBody += _extractBodyContent_(setExclHtml);
-
-  emailBody += '</div></body></html>';
-
-  // Send email
   MailApp.sendEmail({
-    to: recipient,
-    subject: subject,
-    htmlBody: emailBody
+    to:       recipient,
+    subject:  'Monthly Usage Summary - ' + monthName,
+    htmlBody: _buildDashboardEmailHtml_(monthlyData, weeklyRows, targetMk, monthName, lastMonth)
   });
+}
+
+/**
+ * Build the comprehensive dashboard-style email HTML.
+ * Mirrors the Sheets dashboard: summary cards, monthly/weekly totals charts,
+ * individual studio charts, individual set charts.
+ */
+function _buildDashboardEmailHtml_(monthlyData, weeklyRows, targetMk, monthName, lastMonthDate) {
+  var months = monthlyData.months;
+
+  // ── Summary stats for the target month ─────────────────────────────
+  var totalHours = 0, totalSessions = 0;
+  STUDIO_ORDER_DAILY.forEach(function(lbl) {
+    totalHours += monthlyData.studios.hours[lbl][targetMk] || 0;
+  });
+  totalHours = Math.round(totalHours * 10) / 10;
+
+  // Session counts (read # columns from studio sheet)
+  var stSheet = SpreadsheetApp.getActive().getSheetByName('Studio Usage (Daily)');
+  if (stSheet) {
+    var stData = stSheet.getDataRange().getDisplayValues();
+    var stHdr  = stData[0];
+    var stCols = {};
+    stHdr.forEach(function(h, i) { stCols[h] = i; });
+    for (var ri = 1; ri < stData.length; ri++) {
+      var rd   = new Date(stData[ri][0]);
+      var rowMk = rd.getFullYear() + '-' + String(rd.getMonth()).padStart(2, '0');
+      if (rowMk !== targetMk) continue;
+      STUDIO_ORDER_DAILY.forEach(function(lbl) {
+        var ci = stCols[lbl + ' (#)'];
+        if (ci !== undefined) totalSessions += parseInt(stData[ri][ci]) || 0;
+      });
+    }
+  }
+
+  var monthStart  = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth(), 1);
+  var monthEnd    = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0);
+  var workingDays = _countWorkingDays_(monthStart, monthEnd);
+  var avgPerDay   = workingDays > 0 ? Math.round(totalHours / workingDays * 10) / 10 : 0;
+
+  // ── Chart datasets ──────────────────────────────────────────────────
+  var monthlyItems = months.map(function(m) {
+    var mk = m.year + '-' + String(m.month).padStart(2, '0');
+    var tot = 0;
+    STUDIO_ORDER_DAILY.forEach(function(lbl) { tot += monthlyData.studios.hours[lbl][mk] || 0; });
+    return { label: m.name, value: Math.round(tot * 10) / 10 };
+  });
+
+  var weeklyItems = weeklyRows.slice(-16).map(function(r) {
+    return { label: r[0], value: r[1] };
+  });
+
+  // ── Colour maps ─────────────────────────────────────────────────────
+  var STUDIO_COLORS = { 'Studio 1': '#34a853', 'Studio 2': '#4285f4', 'Studio 3': '#fbbc04', 'Studio 4': '#ea4335' };
+  var SET_COLORS    = { 'Iris': '#9c27b0', 'Club': '#00bcd4', 'Nest': '#4caf50', 'Exec': '#ff9800', 'Nova': '#f44336', 'Soho': '#3f51b5' };
+
+  // ── CSS ─────────────────────────────────────────────────────────────
+  var css = [
+    'body{font-family:Arial,sans-serif;background:#f8f9fa;margin:0;padding:16px;}',
+    '.wrap{max-width:720px;margin:0 auto;background:#fff;padding:28px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.08);}',
+    '.sec{font-size:14px;font-weight:bold;color:#1a73e8;border-bottom:2px solid #e8f0fe;padding-bottom:6px;margin:24px 0 14px;}',
+    '.cards{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}',
+    '.card{flex:1;min-width:130px;text-align:center;padding:14px 8px;background:#f8f9fa;border-radius:10px;}',
+    '.cl{font-size:12px;color:#5f6368;margin-bottom:6px;}',
+    '.cv{font-size:26px;font-weight:700;color:#1a73e8;line-height:1.1;}',
+    '.cu{font-size:13px;color:#80868b;font-weight:normal;}',
+    '.cbox{background:#f8f9fa;border-radius:8px;padding:12px 10px;margin-bottom:0;}',
+    '.ct{font-size:12px;font-weight:bold;color:#444;margin-bottom:8px;}',
+    '.pair{display:flex;gap:12px;margin-bottom:14px;}',
+    '.pair .cbox{flex:1;min-width:0;}',
+    '.bars{display:flex;align-items:flex-end;border-bottom:2px solid #ddd;gap:2px;padding:0 2px;}',
+    '.lrow{display:flex;gap:2px;padding:3px 2px 0;margin-bottom:4px;}',
+    '.lbl{flex:1;text-align:center;font-size:7px;color:#777;overflow:hidden;white-space:nowrap;}',
+  ].join('');
+
+  // ── HTML ────────────────────────────────────────────────────────────
+  var h = '<html><head><meta charset="UTF-8"><style>' + css + '</style></head><body><div class="wrap">';
+
+  h += '<h1 style="color:#1a73e8;text-align:center;font-size:22px;margin-bottom:20px;">Monthly Usage Summary — ' + monthName + '</h1>';
+
+  // Summary cards
+  h += '<div class="cards">';
+  h += '<div class="card"><div class="cl">Total Hours</div><div class="cv">' + totalHours + '<span class="cu">h</span></div></div>';
+  h += '<div class="card"><div class="cl">Working Days</div><div class="cv">' + workingDays + '<span class="cu"> days</span></div></div>';
+  h += '<div class="card"><div class="cl">Avg Hours/Day</div><div class="cv">' + avgPerDay + '<span class="cu">h</span></div></div>';
+  h += '<div class="card"><div class="cl">Total Sessions</div><div class="cv">' + totalSessions + '</div></div>';
+  h += '</div>';
+
+  // Monthly & weekly totals
+  h += '<div class="sec">📊 Summary Totals</div>';
+  h += '<div class="pair">';
+  h += '<div class="cbox"><div class="ct">Total Hours per Month</div>' + _emailBarChart_(monthlyItems, '#1a73e8', 150) + '</div>';
+  h += '<div class="cbox"><div class="ct">Total Hours per Week (last 16 wks)</div>' + _emailBarChart_(weeklyItems, '#34a853', 150) + '</div>';
+  h += '</div>';
+
+  // Individual studios
+  h += '<div class="sec">🏢 Individual Studios</div>';
+  h += _emailChartPairs_(['Studio 1', 'Studio 2', 'Studio 3', 'Studio 4'], monthlyData.studios, STUDIO_COLORS, months);
+
+  // Individual sets
+  h += '<div class="sec">🎬 Individual Sets</div>';
+  h += _emailChartPairs_(['Iris', 'Club', 'Nest', 'Exec', 'Nova', 'Soho'], monthlyData.sets, SET_COLORS, months);
+
+  h += '</div></body></html>';
+  return h;
+}
+
+/**
+ * Render a single-series vertical bar chart as HTML.
+ * items: [{label, value}]
+ */
+function _emailBarChart_(items, barColor, chartH) {
+  if (!items || items.length === 0) return '<p style="color:#999;font-size:12px;">No data</p>';
+  var maxVal = 0;
+  items.forEach(function(i) { if (i.value > maxVal) maxVal = i.value; });
+  if (maxVal === 0) maxVal = 1;
+
+  var inner = chartH - 26;  // leave room for value label above bar
+  var html  = '<div class="bars" style="height:' + chartH + 'px;">';
+  items.forEach(function(item) {
+    var barH = Math.max(2, Math.round((item.value / maxVal) * inner));
+    html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">';
+    html += '<span style="font-size:8px;font-weight:bold;color:#333;margin-bottom:2px;">' + item.value + '</span>';
+    html += '<div style="width:85%;background:' + barColor + ';border-radius:2px 2px 0 0;height:' + barH + 'px;min-width:6px;"></div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div class="lrow">';
+  items.forEach(function(item) {
+    html += '<div class="lbl">' + item.label + '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render a dual-bar vertical chart (Hours + % side-by-side per month) as HTML.
+ * items: [{label, hours, pct}]
+ */
+function _emailDualBarChart_(items, solidColor, lightColor, chartH) {
+  if (!items || items.length === 0) return '<p style="color:#999;font-size:12px;">No data</p>';
+  var maxHrs = 0;
+  items.forEach(function(i) { if (i.hours > maxHrs) maxHrs = i.hours; });
+  if (maxHrs === 0) maxHrs = 1;
+  var inner = chartH - 28;
+
+  var html = '<div class="bars" style="height:' + chartH + 'px;gap:4px;">';
+  items.forEach(function(item) {
+    var hrsH = Math.max(2, Math.round((item.hours / maxHrs) * inner));
+    var pctH = Math.max(2, Math.round((item.pct  / 100)    * inner));
+    html += '<div style="flex:1;display:flex;align-items:flex-end;gap:1px;justify-content:center;">';
+
+    // Hours bar
+    html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">';
+    html += '<span style="font-size:7px;font-weight:bold;color:#333;margin-bottom:1px;">' + item.hours + '</span>';
+    html += '<div style="width:100%;background:' + solidColor + ';border-radius:2px 2px 0 0;height:' + hrsH + 'px;"></div>';
+    html += '</div>';
+
+    // Pct bar
+    html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">';
+    html += '<span style="font-size:7px;color:#555;margin-bottom:1px;">' + item.pct + '%</span>';
+    html += '<div style="width:100%;background:' + lightColor + ';border-radius:2px 2px 0 0;height:' + pctH + 'px;"></div>';
+    html += '</div>';
+
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div class="lrow" style="gap:4px;">';
+  items.forEach(function(item) {
+    html += '<div class="lbl" style="flex:2;">' + item.label + '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Build a row of 2-column chart pairs for studios or sets.
+ */
+function _emailChartPairs_(labels, dataSource, colorMap, months) {
+  var html = '';
+  for (var i = 0; i < labels.length; i += 2) {
+    var pair = labels.slice(i, i + 2);
+    html += '<div class="pair">';
+    pair.forEach(function(label) {
+      var color      = colorMap[label] || '#4285f4';
+      var lightColor = _lightenColor_(color, 0.45);
+      var items = months.map(function(m) {
+        var mk = m.year + '-' + String(m.month).padStart(2, '0');
+        return {
+          label: m.name,
+          hours: Math.round((dataSource.hours[label]       ? dataSource.hours[label][mk]       || 0 : 0) * 10) / 10,
+          pct:   Math.round((dataSource.percentages[label] ? dataSource.percentages[label][mk] || 0 : 0) * 10) / 10
+        };
+      });
+      html += '<div class="cbox">';
+      html += '<div class="ct" style="color:' + color + ';">' + label + '</div>';
+      html += _emailDualBarChart_(items, color, lightColor, 140);
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  return html;
 }
 
 /**
